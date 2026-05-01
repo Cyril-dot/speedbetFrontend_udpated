@@ -137,7 +137,8 @@ export const useStore = create(
               ),
             };
           }
-          return { slip: [...s.slip, sel], slipOpen: true };
+          // FIX: removed slipOpen: true so the drawer no longer auto-opens on mobile
+          return { slip: [...s.slip, sel] };
         }),
       removeFromSlip: (id) => set((s) => ({ slip: s.slip.filter((x) => x.id !== id) })),
       clearSlip: () => set({ slip: [] }),
