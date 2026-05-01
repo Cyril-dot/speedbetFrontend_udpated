@@ -4,7 +4,225 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { TeamBadge } from './Shared';
 
-// ─── League background images (internal only — not displayed) ─────────────────
+// ─── Top 6 League Teams with hardcoded logos ──────────────────────────────────
+const TEAM_LOGOS = {
+  // ── Premier League ──────────────────────────────────────────────────────────
+  'manchester city':        'https://media.api-sports.io/football/teams/50.png',
+  'man city':               'https://media.api-sports.io/football/teams/50.png',
+  'manchester united':      'https://media.api-sports.io/football/teams/33.png',
+  'man united':             'https://media.api-sports.io/football/teams/33.png',
+  'man utd':                'https://media.api-sports.io/football/teams/33.png',
+  'arsenal':                'https://media.api-sports.io/football/teams/42.png',
+  'chelsea':                'https://media.api-sports.io/football/teams/49.png',
+  'liverpool':              'https://media.api-sports.io/football/teams/40.png',
+  'tottenham':              'https://media.api-sports.io/football/teams/47.png',
+  'spurs':                  'https://media.api-sports.io/football/teams/47.png',
+  'tottenham hotspur':      'https://media.api-sports.io/football/teams/47.png',
+  'newcastle':              'https://media.api-sports.io/football/teams/34.png',
+  'newcastle united':       'https://media.api-sports.io/football/teams/34.png',
+  'aston villa':            'https://media.api-sports.io/football/teams/66.png',
+  'west ham':               'https://media.api-sports.io/football/teams/48.png',
+  'west ham united':        'https://media.api-sports.io/football/teams/48.png',
+  'brighton':               'https://media.api-sports.io/football/teams/51.png',
+  'brighton & hove albion': 'https://media.api-sports.io/football/teams/51.png',
+  'brentford':              'https://media.api-sports.io/football/teams/55.png',
+  'fulham':                 'https://media.api-sports.io/football/teams/36.png',
+  'crystal palace':         'https://media.api-sports.io/football/teams/52.png',
+  'wolverhampton':          'https://media.api-sports.io/football/teams/39.png',
+  'wolves':                 'https://media.api-sports.io/football/teams/39.png',
+  'everton':                'https://media.api-sports.io/football/teams/45.png',
+  'nottingham forest':      'https://media.api-sports.io/football/teams/65.png',
+  "nott'm forest":          'https://media.api-sports.io/football/teams/65.png',
+  'leicester':              'https://media.api-sports.io/football/teams/46.png',
+  'leicester city':         'https://media.api-sports.io/football/teams/46.png',
+  'southampton':            'https://media.api-sports.io/football/teams/41.png',
+  'bournemouth':            'https://media.api-sports.io/football/teams/35.png',
+  'ipswich':                'https://media.api-sports.io/football/teams/57.png',
+  'ipswich town':           'https://media.api-sports.io/football/teams/57.png',
+
+  // ── La Liga ─────────────────────────────────────────────────────────────────
+  'real madrid':            'https://media.api-sports.io/football/teams/541.png',
+  'barcelona':              'https://media.api-sports.io/football/teams/529.png',
+  'fc barcelona':           'https://media.api-sports.io/football/teams/529.png',
+  'atletico madrid':        'https://media.api-sports.io/football/teams/530.png',
+  'atlético madrid':        'https://media.api-sports.io/football/teams/530.png',
+  'athletic bilbao':        'https://media.api-sports.io/football/teams/531.png',
+  'athletic club':          'https://media.api-sports.io/football/teams/531.png',
+  'real sociedad':          'https://media.api-sports.io/football/teams/548.png',
+  'villarreal':             'https://media.api-sports.io/football/teams/533.png',
+  'real betis':             'https://media.api-sports.io/football/teams/543.png',
+  'sevilla':                'https://media.api-sports.io/football/teams/536.png',
+  'valencia':               'https://media.api-sports.io/football/teams/532.png',
+  'celta vigo':             'https://media.api-sports.io/football/teams/538.png',
+  'getafe':                 'https://media.api-sports.io/football/teams/546.png',
+  'girona':                 'https://media.api-sports.io/football/teams/547.png',
+  'osasuna':                'https://media.api-sports.io/football/teams/727.png',
+  'rayo vallecano':         'https://media.api-sports.io/football/teams/728.png',
+  'mallorca':               'https://media.api-sports.io/football/teams/798.png',
+  'deportivo alaves':       'https://media.api-sports.io/football/teams/542.png',
+  'alaves':                 'https://media.api-sports.io/football/teams/542.png',
+  'espanyol':               'https://media.api-sports.io/football/teams/540.png',
+  'leganes':                'https://media.api-sports.io/football/teams/724.png',
+  'valladolid':             'https://media.api-sports.io/football/teams/720.png',
+
+  // ── Bundesliga ──────────────────────────────────────────────────────────────
+  'bayern munich':          'https://media.api-sports.io/football/teams/157.png',
+  'fc bayern':              'https://media.api-sports.io/football/teams/157.png',
+  'borussia dortmund':      'https://media.api-sports.io/football/teams/165.png',
+  'dortmund':               'https://media.api-sports.io/football/teams/165.png',
+  'bayer leverkusen':       'https://media.api-sports.io/football/teams/168.png',
+  'leverkusen':             'https://media.api-sports.io/football/teams/168.png',
+  'rb leipzig':             'https://media.api-sports.io/football/teams/173.png',
+  'leipzig':                'https://media.api-sports.io/football/teams/173.png',
+  'eintracht frankfurt':    'https://media.api-sports.io/football/teams/169.png',
+  'frankfurt':              'https://media.api-sports.io/football/teams/169.png',
+  'vfb stuttgart':          'https://media.api-sports.io/football/teams/172.png',
+  'stuttgart':              'https://media.api-sports.io/football/teams/172.png',
+  'sc freiburg':            'https://media.api-sports.io/football/teams/160.png',
+  'freiburg':               'https://media.api-sports.io/football/teams/160.png',
+  'borussia monchengladbach': 'https://media.api-sports.io/football/teams/163.png',
+  'gladbach':               'https://media.api-sports.io/football/teams/163.png',
+  'werder bremen':          'https://media.api-sports.io/football/teams/162.png',
+  'bremen':                 'https://media.api-sports.io/football/teams/162.png',
+  'union berlin':           'https://media.api-sports.io/football/teams/182.png',
+  'fc augsburg':            'https://media.api-sports.io/football/teams/167.png',
+  'augsburg':               'https://media.api-sports.io/football/teams/167.png',
+  'wolfsburg':              'https://media.api-sports.io/football/teams/161.png',
+  'vfl wolfsburg':          'https://media.api-sports.io/football/teams/161.png',
+  'hoffenheim':             'https://media.api-sports.io/football/teams/167.png',
+  'tsg hoffenheim':         'https://media.api-sports.io/football/teams/167.png',
+  'mainz':                  'https://media.api-sports.io/football/teams/164.png',
+  'mainz 05':               'https://media.api-sports.io/football/teams/164.png',
+  'holstein kiel':          'https://media.api-sports.io/football/teams/192.png',
+  'heidenheim':             'https://media.api-sports.io/football/teams/180.png',
+  'st. pauli':              'https://media.api-sports.io/football/teams/181.png',
+  'bochum':                 'https://media.api-sports.io/football/teams/176.png',
+
+  // ── Serie A ─────────────────────────────────────────────────────────────────
+  'inter milan':            'https://media.api-sports.io/football/teams/505.png',
+  'inter':                  'https://media.api-sports.io/football/teams/505.png',
+  'internazionale':         'https://media.api-sports.io/football/teams/505.png',
+  'juventus':               'https://media.api-sports.io/football/teams/496.png',
+  'ac milan':               'https://media.api-sports.io/football/teams/489.png',
+  'milan':                  'https://media.api-sports.io/football/teams/489.png',
+  'napoli':                 'https://media.api-sports.io/football/teams/492.png',
+  'as roma':                'https://media.api-sports.io/football/teams/497.png',
+  'roma':                   'https://media.api-sports.io/football/teams/497.png',
+  'lazio':                  'https://media.api-sports.io/football/teams/487.png',
+  'ss lazio':               'https://media.api-sports.io/football/teams/487.png',
+  'atalanta':               'https://media.api-sports.io/football/teams/499.png',
+  'fiorentina':             'https://media.api-sports.io/football/teams/502.png',
+  'bologna':                'https://media.api-sports.io/football/teams/500.png',
+  'torino':                 'https://media.api-sports.io/football/teams/503.png',
+  'udinese':                'https://media.api-sports.io/football/teams/494.png',
+  'sampdoria':              'https://media.api-sports.io/football/teams/507.png',
+  'sassuolo':               'https://media.api-sports.io/football/teams/488.png',
+  'genoa':                  'https://media.api-sports.io/football/teams/495.png',
+  'cagliari':               'https://media.api-sports.io/football/teams/490.png',
+  'hellas verona':          'https://media.api-sports.io/football/teams/504.png',
+  'verona':                 'https://media.api-sports.io/football/teams/504.png',
+  'lecce':                  'https://media.api-sports.io/football/teams/867.png',
+  'frosinone':              'https://media.api-sports.io/football/teams/512.png',
+  'como':                   'https://media.api-sports.io/football/teams/514.png',
+  'venezia':                'https://media.api-sports.io/football/teams/517.png',
+  'parma':                  'https://media.api-sports.io/football/teams/511.png',
+  'empoli':                 'https://media.api-sports.io/football/teams/508.png',
+  'monza':                  'https://media.api-sports.io/football/teams/1579.png',
+
+  // ── Ligue 1 ─────────────────────────────────────────────────────────────────
+  'paris saint-germain':    'https://media.api-sports.io/football/teams/85.png',
+  'psg':                    'https://media.api-sports.io/football/teams/85.png',
+  'paris sg':               'https://media.api-sports.io/football/teams/85.png',
+  'marseille':              'https://media.api-sports.io/football/teams/81.png',
+  'olympique de marseille': 'https://media.api-sports.io/football/teams/81.png',
+  'lyon':                   'https://media.api-sports.io/football/teams/80.png',
+  'olympique lyonnais':     'https://media.api-sports.io/football/teams/80.png',
+  'monaco':                 'https://media.api-sports.io/football/teams/91.png',
+  'as monaco':              'https://media.api-sports.io/football/teams/91.png',
+  'lille':                  'https://media.api-sports.io/football/teams/79.png',
+  'losc lille':             'https://media.api-sports.io/football/teams/79.png',
+  'rennes':                 'https://media.api-sports.io/football/teams/94.png',
+  'stade rennais':          'https://media.api-sports.io/football/teams/94.png',
+  'nice':                   'https://media.api-sports.io/football/teams/84.png',
+  'ogc nice':               'https://media.api-sports.io/football/teams/84.png',
+  'lens':                   'https://media.api-sports.io/football/teams/116.png',
+  'rc lens':                'https://media.api-sports.io/football/teams/116.png',
+  'montpellier':            'https://media.api-sports.io/football/teams/93.png',
+  'strasbourg':             'https://media.api-sports.io/football/teams/95.png',
+  'nantes':                 'https://media.api-sports.io/football/teams/83.png',
+  'toulouse':               'https://media.api-sports.io/football/teams/96.png',
+  'brest':                  'https://media.api-sports.io/football/teams/113.png',
+  'stade brestois':         'https://media.api-sports.io/football/teams/113.png',
+  'reims':                  'https://media.api-sports.io/football/teams/82.png',
+  'stade de reims':         'https://media.api-sports.io/football/teams/82.png',
+  'auxerre':                'https://media.api-sports.io/football/teams/114.png',
+  'le havre':               'https://media.api-sports.io/football/teams/1106.png',
+  'angers':                 'https://media.api-sports.io/football/teams/119.png',
+  'saint-etienne':          'https://media.api-sports.io/football/teams/97.png',
+
+  // ── UEFA Champions League extras ─────────────────────────────────────────────
+  'porto':                  'https://media.api-sports.io/football/teams/212.png',
+  'benfica':                'https://media.api-sports.io/football/teams/211.png',
+  'celtic':                 'https://media.api-sports.io/football/teams/264.png',
+  'rangers':                'https://media.api-sports.io/football/teams/257.png',
+  'ajax':                   'https://media.api-sports.io/football/teams/194.png',
+  'psv':                    'https://media.api-sports.io/football/teams/197.png',
+  'psv eindhoven':          'https://media.api-sports.io/football/teams/197.png',
+  'feyenoord':              'https://media.api-sports.io/football/teams/193.png',
+  'shakhtar donetsk':       'https://media.api-sports.io/football/teams/228.png',
+  'dynamo kyiv':            'https://media.api-sports.io/football/teams/230.png',
+  'anderlecht':             'https://media.api-sports.io/football/teams/235.png',
+  'club brugge':            'https://media.api-sports.io/football/teams/234.png',
+  'sporting cp':            'https://media.api-sports.io/football/teams/228.png',
+  'galatasaray':            'https://media.api-sports.io/football/teams/357.png',
+  'fenerbahce':             'https://media.api-sports.io/football/teams/356.png',
+  'red bull salzburg':      'https://media.api-sports.io/football/teams/322.png',
+  'salzburg':               'https://media.api-sports.io/football/teams/322.png',
+};
+
+// Top 6 league keyword identifiers
+const TOP6_LEAGUE_KEYWORDS = [
+  'premier league',
+  'la liga',
+  'bundesliga',
+  'serie a',
+  'ligue 1',
+  'champions league',
+  'uefa champions',
+];
+
+/**
+ * Resolve a hardcoded logo URL for a team name.
+ * Tries exact match first, then substring match.
+ */
+function resolveHardcodedLogo(teamName = '') {
+  if (!teamName) return null;
+  const n = teamName.toLowerCase().trim();
+  if (TEAM_LOGOS[n]) return TEAM_LOGOS[n];
+  for (const [key, url] of Object.entries(TEAM_LOGOS)) {
+    if (n.includes(key) || key.includes(n)) return url;
+  }
+  return null;
+}
+
+/**
+ * Returns true if either team belongs to a top-6 league,
+ * OR if the league string itself matches one of our keywords.
+ */
+function isTop6Match(match) {
+  const league = (match.league ?? '').toLowerCase();
+  if (TOP6_LEAGUE_KEYWORDS.some((k) => league.includes(k))) return true;
+
+  const homeTeam = (match.home?.name ?? match.homeTeam ?? '').toLowerCase().trim();
+  const awayTeam = (match.away?.name ?? match.awayTeam ?? '').toLowerCase().trim();
+
+  const inMap = (n) =>
+    Object.keys(TEAM_LOGOS).some((k) => n.includes(k) || k.includes(n));
+
+  return inMap(homeTeam) || inMap(awayTeam);
+}
+
+// ─── League background images ─────────────────────────────────────────────────
 const LEAGUE_BG = {
   'champions': 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1800&q=80',
   'premier':   'https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?auto=format&fit=crop&w=1800&q=80',
@@ -24,7 +242,7 @@ function bgForLeague(league = '') {
   return LEAGUE_BG.default;
 }
 
-// ─── League accent colour (internal only — not displayed) ─────────────────────
+// ─── League accent colour ──────────────────────────────────────────────────────
 function accentForLeague(league = '') {
   const l = league.toLowerCase();
   if (l.includes('champions')) return '#19a4ff';
@@ -40,7 +258,7 @@ function accentForLeague(league = '') {
   return '#ff6b35';
 }
 
-// ─── Extract odds from the API odds array ─────────────────────────────────────
+// ─── Extract odds ──────────────────────────────────────────────────────────────
 function parseOdds(oddsArr, homeTeam, awayTeam) {
   if (!Array.isArray(oddsArr) || !oddsArr.length) return null;
   let home = null, draw = null, away = null;
@@ -59,46 +277,59 @@ function parseOdds(oddsArr, homeTeam, awayTeam) {
   return { home, draw, away };
 }
 
-// ─── Build slides from real match data only ───────────────────────────────────
+// ─── Enrich a team object with hardcoded logo if API logo is missing ──────────
+function enrichTeam(teamObj, fallbackName = '') {
+  const name = teamObj?.name ?? fallbackName;
+  const apiLogo = teamObj?.logo ?? '';
+  // Use API logo if present, otherwise fall back to hardcoded
+  const logo = apiLogo || resolveHardcodedLogo(name) || '';
+  return { ...teamObj, name, logo };
+}
+
+// ─── Build slides — only from top-6 league matches ────────────────────────────
 function buildSlides(matches) {
   if (!matches?.length) return [];
 
-  const live     = matches.filter((m) => m.status === 'LIVE');
-  const upcoming = matches.filter((m) => m.status === 'UPCOMING');
-  const pool     = [...live, ...upcoming].slice(0, 6);
+  const top6 = matches.filter(isTop6Match);
+  const live     = top6.filter((m) => m.status === 'LIVE');
+  const upcoming = top6.filter((m) => m.status === 'UPCOMING');
+  const pool = [...live, ...upcoming].slice(0, 6);
 
   return pool.map((m) => {
-    const homeTeam = m.home?.name ?? m.homeTeam ?? '';
-    const awayTeam = m.away?.name ?? m.awayTeam ?? '';
-    const homeLogo = m.home?.logo ?? m.homeLogo ?? '';
-    const awayLogo = m.away?.logo ?? m.awayLogo ?? '';
-    const league   = m.league ?? '';
+    const rawHome = m.home ?? { name: m.homeTeam, logo: m.homeLogo };
+    const rawAway = m.away ?? { name: m.awayTeam, logo: m.awayLogo };
+
+    const home = enrichTeam(rawHome);
+    const away = enrichTeam(rawAway);
+    const league = m.league ?? '';
+
     return {
       match_id:   m.id,
       type:       m.status === 'LIVE' ? 'live' : 'upcoming',
       bg:         bgForLeague(league),
       accent:     accentForLeague(league),
-      // league is kept internally for bg/accent but NOT passed to SlideContent for display
-      homeTeam,   awayTeam,
-      homeLogo,   awayLogo,
+      homeTeam:   home.name,
+      awayTeam:   away.name,
+      homeLogo:   home.logo,
+      awayLogo:   away.logo,
       homeShort:  m.home?.short,
       awayShort:  m.away?.short,
       score_home: m.score?.home ?? m.scoreHome ?? null,
       score_away: m.score?.away ?? m.scoreAway ?? null,
       minute:     m.minute ?? m.metadata?.current_minute ?? null,
       kickoff:    m.kickoff ?? m.kickoffAt ?? null,
-      odds:       parseOdds(m.odds, homeTeam, awayTeam),
+      odds:       parseOdds(m.odds, home.name, away.name),
     };
   });
 }
 
-// ─── Odds drift (for visual liveliness) ──────────────────────────────────────
+// ─── Odds drift ───────────────────────────────────────────────────────────────
 function drifted(base, tick, seed) {
   if (!base) return null;
   return Math.max(1.05, +(base + Math.sin((tick + seed) * 0.7) * 0.03).toFixed(2));
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main Carousel ────────────────────────────────────────────────────────────
 export default function HomeCarousel({ matches }) {
   const [slides, setSlides] = useState(() => buildSlides(matches ?? []));
   const [idx,    setIdx]    = useState(0);
@@ -168,7 +399,6 @@ export default function HomeCarousel({ matches }) {
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'linear-gradient(180deg,transparent 55%,rgba(9,9,15,0.75) 100%)',
       }} />
-      {/* Accent tint on right */}
       <div className="absolute inset-0 pointer-events-none" style={{
         background: `radial-gradient(ellipse at 85% 50%, ${slide.accent}28, transparent 60%)`,
       }} />
@@ -235,7 +465,7 @@ export default function HomeCarousel({ matches }) {
   );
 }
 
-// ─── Slide content — no league name rendered ──────────────────────────────────
+// ─── Slide Content ────────────────────────────────────────────────────────────
 function SlideContent({ slide, tick, accent, addToSlip, pushToast, navigate }) {
   const [added, setAdded] = useState({});
 
@@ -266,7 +496,7 @@ function SlideContent({ slide, tick, accent, addToSlip, pushToast, navigate }) {
 
       {/* LEFT — match info */}
       <div>
-        {/* Status badge only — no league text */}
+        {/* Status badge */}
         <div className="flex items-center gap-2 mb-5 flex-wrap">
           {slide.type === 'live' ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>VIRTUAL FOOTBALL — INSTANT VIRTUALS</title>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -20,8 +20,31 @@
   </header>
 
   <main class="game-container">
-    <!-- LEFT: BETTING PANEL -->
-    <aside class="bet-panel glass-panel">
+
+    <!-- CENTER: PITCH -->
+    <section class="pitch-section">
+      <canvas id="pitchCanvas"></canvas>
+      <div class="events-feed" id="eventsFeed"></div>
+      <div class="countdown-wrap" id="countdownWrap">
+        <div class="countdown-label">NEXT MATCH IN</div>
+        <div class="countdown-val" id="countdownVal">8</div>
+      </div>
+
+      <!-- Auth gate lives inside pitch on mobile so it overlays everything -->
+      <div class="auth-gate hidden" id="auth-gate">
+        <p class="auth-gate-msg" id="auth-gate-msg">Sign in to play.</p>
+        <div class="auth-form">
+          <input class="auth-input" id="authEmail" type="email" placeholder="Email" autocomplete="email" />
+          <input class="auth-input" id="authPassword" type="password" placeholder="Password" autocomplete="current-password" />
+          <button class="btn-login" id="btnLogin">SIGN IN</button>
+          <button class="btn-demo" id="btnDemoUser">DEMO PLAY</button>
+          <div class="auth-error" id="authError"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEFT / BOTTOM: BETTING PANEL -->
+    <aside class="bet-panel glass-panel" id="betPanel">
       <h3 class="panel-title">PLACE BET</h3>
 
       <!-- Match Info -->
@@ -88,31 +111,31 @@
 
       <!-- Bet Amount -->
       <div class="bet-section">
-        <label class="field-label">BET AMOUNT</label>
+        <label class="field-label bet-label">BET AMOUNT</label>
         <div class="bet-input-row">
-          <button class="btn-adj" onclick="adjBet(0.5)">½</button>
-          <input class="bet-input" id="betAmt" type="number" value="10" min="1" max="1000" />
-          <button class="btn-adj" onclick="adjBet(2)">2×</button>
+          <button class="btn-adj" id="adjHalf">½</button>
+          <input class="bet-input" id="betAmt" type="number" value="10" min="1" max="1000" inputmode="decimal" />
+          <button class="btn-adj" id="adjDouble">2×</button>
         </div>
         <div class="quick-bets">
-          <button class="btn-quick" onclick="setBet(5)">$5</button>
-          <button class="btn-quick" onclick="setBet(10)">$10</button>
-          <button class="btn-quick" onclick="setBet(25)">$25</button>
-          <button class="btn-quick" onclick="setBet(50)">$50</button>
+          <button class="btn-quick" data-amount="5">$5</button>
+          <button class="btn-quick" data-amount="10">$10</button>
+          <button class="btn-quick" data-amount="25">$25</button>
+          <button class="btn-quick" data-amount="50">$50</button>
         </div>
       </div>
 
       <!-- Selected Bet -->
-      <div class="selected-bet" id="selectedBet">
+      <div class="selected-bet">
         <span class="sel-label">SELECTED:</span>
         <span class="sel-value" id="selValue">None</span>
       </div>
 
-      <button class="btn-bet" id="placeBetBtn" onclick="placeBet()">PLACE BET</button>
+      <button class="btn-bet" id="placeBetBtn">PLACE BET</button>
 
       <div class="bet-status" id="betStatus"></div>
 
-      <!-- Match Stats (moved from right panel) -->
+      <!-- Match Stats -->
       <div class="stats-inline">
         <div class="panel-title" style="margin-top:0.5rem">MATCH STATS</div>
         <div class="stat-row">
@@ -151,14 +174,113 @@
       </div>
     </aside>
 
-    <!-- CENTER: PITCH (now full remaining width) -->
-    <section class="pitch-section">
-      <canvas id="pitchCanvas"></canvas>
-      <div class="events-feed" id="eventsFeed"></div>
-    </section>
-
   </main>
 
+  <!-- MOBILE BOTTOM TAB BAR -->
+  <nav class="mobile-tabs" id="mobileTabs">
+    <div class="mobile-tabs-inner">
+      <button class="tab-btn active" data-tab="pitch" id="tabPitch">
+        <span class="tab-icon">⚽</span>
+        <span>PITCH</span>
+      </button>
+      <button class="tab-btn" data-tab="bet" id="tabBet">
+        <span class="tab-icon">🎯</span>
+        <span>BET</span>
+      </button>
+      <button class="tab-btn" data-tab="stats" id="tabStats">
+        <span class="tab-icon">📊</span>
+        <span>STATS</span>
+      </button>
+    </div>
+  </nav>
+
   <script src="game.js"></script>
+  <script>
+    /* ── MOBILE TAB SWITCHING ── */
+    (function() {
+      var isMobile = function() { return window.innerWidth <= 768; };
+
+      var pitchSection = document.querySelector('.pitch-section');
+      var betPanel     = document.getElementById('betPanel');
+      var statsInline  = betPanel ? betPanel.querySelector('.stats-inline') : null;
+      var tabBtns      = document.querySelectorAll('.tab-btn');
+
+      function activateTab(tab) {
+        if (!isMobile()) return;
+
+        tabBtns.forEach(function(b) { b.classList.remove('active'); });
+        document.querySelector('[data-tab="' + tab + '"]').classList.add('active');
+
+        if (tab === 'pitch') {
+          pitchSection.style.display = '';
+          // On pitch tab: show pitch large, hide bet panel
+          pitchSection.style.flex = '1';
+          if (betPanel) betPanel.style.display = 'none';
+        } else if (tab === 'bet') {
+          pitchSection.style.flex = '0 0 42%';
+          pitchSection.style.display = '';
+          if (betPanel) {
+            betPanel.style.display = 'flex';
+            // Show all except stats
+            if (statsInline) statsInline.style.display = 'none';
+          }
+        } else if (tab === 'stats') {
+          pitchSection.style.flex = '0 0 42%';
+          pitchSection.style.display = '';
+          if (betPanel) {
+            betPanel.style.display = 'flex';
+            if (statsInline) statsInline.style.display = '';
+            // Scroll to stats
+            setTimeout(function() {
+              if (statsInline) statsInline.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+          }
+        }
+      }
+
+      tabBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          activateTab(btn.dataset.tab);
+        });
+      });
+
+      // On desktop, reset inline styles
+      window.addEventListener('resize', function() {
+        if (!isMobile()) {
+          if (pitchSection) pitchSection.style = '';
+          if (betPanel)     betPanel.style     = '';
+          if (statsInline)  statsInline.style  = '';
+        } else {
+          activateTab('bet'); // default to bet tab on mobile
+        }
+      });
+
+      // Init on mobile
+      if (isMobile()) {
+        activateTab('bet');
+        // Set default tab active
+        tabBtns.forEach(function(b) { b.classList.remove('active'); });
+        document.getElementById('tabBet').classList.add('active');
+      }
+
+      // Wire adj buttons (inline onclick removed for CSP friendliness)
+      var adjHalf   = document.getElementById('adjHalf');
+      var adjDouble = document.getElementById('adjDouble');
+      var betAmt    = document.getElementById('betAmt');
+
+      if (adjHalf) adjHalf.addEventListener('click', function() {
+        if (betAmt) betAmt.value = Math.max(1, Math.round(parseFloat(betAmt.value || 10) * 0.5 * 100) / 100);
+      });
+      if (adjDouble) adjDouble.addEventListener('click', function() {
+        if (betAmt) betAmt.value = Math.min(100000, Math.round(parseFloat(betAmt.value || 10) * 2 * 100) / 100);
+      });
+
+      document.querySelectorAll('.btn-quick').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (betAmt) betAmt.value = btn.dataset.amount;
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

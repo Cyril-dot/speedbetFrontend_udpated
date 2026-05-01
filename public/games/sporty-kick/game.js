@@ -88,7 +88,6 @@ const Auth = (() => {
     try {
       const res = await fetch(CONFIG.BASE + '/api/auth/refresh', {
         method:  'POST',
-        // credentials: 'include' only on refresh — mirrors Aviator _silentRefresh
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -109,7 +108,7 @@ const Auth = (() => {
     }
   }
 
-  // Cross-tab sync — mirrors Aviator cross-tab listener
+  // Cross-tab sync
   window.addEventListener('storage', e => {
     if (e.key !== TOKEN_KEY) return;
     if (!e.newValue && e.oldValue)
@@ -128,10 +127,6 @@ const Auth = (() => {
 
 /* =====================================================
    3. API CLIENT
-   All requests: CONFIG.BASE + '/api' + path
-   No credentials: 'include' on regular requests — only on refresh.
-   Automatic 401 → silent refresh → retry.
-   Mirrors Aviator SpeedBetAPI._req exactly.
    ===================================================== */
 const API = (() => {
   async function request(method, path, body, retrying = false) {
@@ -150,7 +145,6 @@ const API = (() => {
       throw new Error('NETWORK_ERROR');
     }
 
-    // 401 → try silent refresh once — mirrors Aviator _req
     if (res.status === 401 && !retrying) {
       const refreshed = await Auth.handleExpiry();
       if (refreshed) return request(method, path, body, true);
@@ -164,11 +158,9 @@ const API = (() => {
     }
 
     const json = await res.json();
-    // Unwrap { data: T } envelope — mirrors Aviator
     return json.data !== undefined ? json.data : json;
   }
 
-  // ── AUTH endpoints — identical paths to Aviator ──────────
   const auth = {
     login: async (email, password) => {
       const data = await request('POST', '/auth/login', { email, password });
@@ -193,13 +185,11 @@ const API = (() => {
     },
   };
 
-  // ── WALLET endpoints — /api/wallet matches Aviator ───────
   const wallet = {
     get:          ()         => request('GET', '/wallet'),
     transactions: (p=0,s=20) => request('GET', `/wallet/transactions?page=${p}&size=${s}`),
   };
 
-  // ── GAMES endpoints — mirrors Aviator SpeedBetAPI.games ──
   const games = {
     currentRound: slug          => request('GET',  `/games/${slug}/current-round`),
     play:         (slug, body)  => request('POST', `/games/${slug}/play`,    body),
@@ -213,13 +203,11 @@ const API = (() => {
 
 /* =====================================================
    4. WEBSOCKET BUS (STOMP over SockJS)
-   Mirrors Aviator WSBus exactly — uses Stomp.over(SockJS).
-   Supports both @stomp/stompjs and stomp.js globals.
    ===================================================== */
 const WSBus = (() => {
   let client    = null;
   let connected = false;
-  const subs    = {};   // topic → callback (last-writer-wins, clean re-subscribe)
+  const subs    = {};
 
   function connect(onReady) {
     if (typeof SockJS === 'undefined') {
@@ -233,7 +221,6 @@ const WSBus = (() => {
 
     const wsHeaders = Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {};
 
-    // Support both @stomp/stompjs (StompJs.Client) and stomp.js (Stomp.over)
     if (typeof StompJs !== 'undefined') {
       client = new StompJs.Client({
         webSocketFactory: () => new SockJS(CONFIG.BASE + CONFIG.WS_ENDPOINT),
@@ -252,7 +239,6 @@ const WSBus = (() => {
       });
       client.activate();
     } else if (typeof Stomp !== 'undefined') {
-      // stomp.js fallback — mirrors Aviator WSBus exactly
       const socket = new SockJS(CONFIG.BASE + CONFIG.WS_ENDPOINT);
       client       = Stomp.over(socket);
       client.debug = () => {};
@@ -297,9 +283,6 @@ const WSBus = (() => {
 
 /* =====================================================
    5. AUTH EVENT REACTOR
-   Central handler for login / logout / expiry.
-   Wires login form + demo button + enter-key.
-   Mirrors Aviator AuthReactor exactly.
    ===================================================== */
 const AuthReactor = (() => {
   function init() {
@@ -335,7 +318,6 @@ const AuthReactor = (() => {
         const data = await API.auth.demoLogin('USER');
         Auth.onLogin(data.accessToken, data.user);
       } catch (e) {
-        // Demo endpoint unreachable — run offline with local balance
         console.warn('[AuthReactor] demo-login unavailable, running offline:', e.message);
         UI.hideAuthGate();
         gameLoopPaused = false;
@@ -353,10 +335,9 @@ const AuthReactor = (() => {
   function _setError(msg)  { const el = document.getElementById('authError'); if (el) el.textContent = msg || ''; }
   function _setLoading(on) { const el = document.getElementById('btnLogin');  if (el) el.disabled   = on; }
 
-  // Mirrors Aviator AuthReactor._onLogin
   async function _onLogin() {
     WSBus.reconnect(() => Wallet.subscribe());
-    await Wallet.fetch();    // GET /api/wallet → real balance
+    await Wallet.fetch();
     UI.hideAuthGate();
     if (gameLoopPaused) {
       gameLoopPaused = false;
@@ -388,16 +369,12 @@ const AuthReactor = (() => {
 
 /* =====================================================
    6. WALLET MANAGER
-   Mirrors Aviator Wallet exactly.
-   GET /api/wallet — fetch real balance.
-   WS /topic/wallet/balance — live sync.
    ===================================================== */
 const Wallet = (() => {
   async function fetch() {
     if (!Auth.isAuthenticated()) return;
     try {
       const data    = await API.wallet.get();
-      // WalletDto uses "balance" field — mirrors Aviator
       state.balance = parseFloat(data.balance ?? data.amount ?? state.balance);
       updateBalance();
     } catch (e) {
@@ -452,9 +429,7 @@ const state = {
 
 
 /* =====================================================
-   8. RNG / CRASH GENERATOR  (client-side HMAC-SHA256 fallback)
-   Matches Aviator's RNG module exactly.
-   In production the crash point is server-authoritative.
+   8. RNG / CRASH GENERATOR
    ===================================================== */
 const RNG = (() => {
   function randomHex(len) {
@@ -506,8 +481,6 @@ const RNG = (() => {
 
 /* =====================================================
    9. MULTIPLIER SYSTEM
-   Exponential curve: e^(GROWTH_RATE * elapsed_ms)
-   Matches Aviator MultiplierEngine and server config.
    ===================================================== */
 function calcMultiplier(elapsedMs) {
   return Math.max(1.00, Math.floor(Math.pow(Math.E, CONFIG.GROWTH_RATE * elapsedMs) * 100) / 100);
@@ -548,10 +521,27 @@ function initStars() {
   }
 }
 
+/* ─────────────────────────────────────────────────────
+   FIX: resizeCanvas — reads the PARENT's *CSS* size via
+   offsetWidth / offsetHeight (not getBoundingClientRect
+   which feeds back into the layout and causes the canvas
+   to grow endlessly each frame).
+   We also clamp the height so it never grows past the
+   explicitly set CSS height on the wrapper.
+   ───────────────────────────────────────────────────── */
 function resizeCanvas() {
-  const rect    = canvas.parentElement.getBoundingClientRect();
-  canvas.width  = rect.width;
-  canvas.height = rect.height || 420;
+  const parent = canvas.parentElement;
+
+  // Use offsetWidth/Height — these reflect CSS layout, not canvas pixel size,
+  // so reading them does NOT create a reflow feedback loop with the canvas.
+  const w = parent.offsetWidth  || 400;
+  const h = parent.offsetHeight || 420;
+
+  // Only update if dimensions actually changed — avoids unnecessary repaints.
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width  = w;
+    canvas.height = h;
+  }
 }
 
 function drawBackground(now) {
@@ -905,7 +895,6 @@ const UI = (() => {
     }
   }
 
-  // Fairness modal — mirrors Aviator UI.updateFairnessModal
   function updateFairnessDisplay() {
     if (els.fairVal) {
       els.fairVal.textContent = state.serverSeed
@@ -950,7 +939,7 @@ const UI = (() => {
   };
 })();
 
-// Convenience wrappers for internal use / HTML onclick handlers
+// Convenience wrappers
 function updateBalance()              { UI.updateBalance(); }
 function updateButtons()              { UI.updateButtons(); }
 function updateFairnessDisplay()      { UI.updateFairnessDisplay(); }
@@ -963,8 +952,6 @@ function updateMultiplierDisplay(v,s) { UI.updateMultiplierDisplay(v, s); }
 
 /* =====================================================
    12. BET & CASHOUT LOGIC
-   Optimistic local update + server reconcile.
-   Mirrors Aviator CrashRound.placeBet / cashout pattern.
    ===================================================== */
 async function toggleBet(i) {
   if (gameLoopPaused) return;
@@ -979,7 +966,6 @@ async function toggleBet(i) {
   const b = state.bets[i];
 
   if (b.active) {
-    // Cancel — refund locally
     state.balance = Math.floor((state.balance + b.amount) * 100) / 100;
     b.active  = false;
     b.amount  = 0;
@@ -993,27 +979,22 @@ async function toggleBet(i) {
   if (amountInput > state.balance) return;
   b.amount = Math.floor(amountInput * 100) / 100;
 
-  // Optimistic deduct — mirrors Aviator State.placeBet
   state.balance = Math.floor((state.balance - b.amount) * 100) / 100;
   UI.updateBalance();
 
   try {
-    // POST /api/games/{slug}/play { stake } → GameRound { id, walletBalance }
     const round = await API.games.play(CONFIG.GAME_SLUG, { stake: b.amount });
     b.roundId = round.id ?? null;
-    // Server authoritative balance — mirrors Aviator MatchRound.placeBet reconcile
     if (round.walletBalance !== undefined) {
       state.balance = parseFloat(round.walletBalance);
       UI.updateBalance();
     }
   } catch (err) {
     if (err.message === 'SESSION_EXPIRED') {
-      // Refund optimistic deduct
       state.balance = Math.floor((state.balance + b.amount) * 100) / 100;
       UI.updateBalance();
       return;
     }
-    // Server unavailable — local deduction still stands, game continues
     console.warn('[toggleBet] API unavailable, keeping local deduction:', err.message);
   }
 
@@ -1030,7 +1011,6 @@ async function cashout(i) {
 
   const cashoutAt = parseFloat(state.multiplier.toFixed(2));
 
-  // Optimistic local credit — mirrors Aviator State.cashOut
   b.winnings    = Math.floor(b.amount * cashoutAt * 100) / 100;
   state.balance = Math.floor((state.balance + b.winnings) * 100) / 100;
   b.cashedOut   = true;
@@ -1043,13 +1023,10 @@ async function cashout(i) {
   if (!Auth.isAuthenticated()) return;
 
   try {
-    // POST /api/games/{slug}/cashout { roundId, cashoutAt }
-    // Response: { status, multiplier, payout, walletBalance?, newBalance? }
     const data = await API.games.cashout(CONFIG.GAME_SLUG, {
       roundId:   b.roundId,
       cashoutAt,
     });
-    // Server authoritative reconcile — mirrors Aviator _doCashout
     if (data.walletBalance !== undefined) {
       state.balance = parseFloat(data.walletBalance);
     } else if (data.newBalance !== undefined) {
@@ -1063,7 +1040,6 @@ async function cashout(i) {
     UI.updateButtons();
   } catch (err) {
     if (err.message === 'SESSION_EXPIRED') return;
-    // Local win kept — mirrors Aviator cashout sync failure handling
     console.warn('[cashout] API failed, keeping local win:', err.message);
   }
 }
@@ -1146,8 +1122,6 @@ function renderLeaderboard() {
 
 /* =====================================================
    14. GAME STATE MANAGER
-   enterWaiting → enterRunning → enterCrashed → enterWaiting
-   Mirrors Aviator Game.startWaiting / startRunning / _doCrash
    ===================================================== */
 async function enterWaiting() {
   if (gameLoopPaused) return;
@@ -1167,7 +1141,6 @@ async function enterWaiting() {
   anim.trailPoints = [];
   cancelFakeTimers();
 
-  // Generate local crash point — provably-fair HMAC fallback
   try {
     const localInfo  = await RNG.generateCrashPoint();
     state.crashPoint = localInfo.crash;
@@ -1180,7 +1153,6 @@ async function enterWaiting() {
     state.commitHash = RNG.generateHash();
   }
 
-  // Override with server crash point if authenticated — mirrors Aviator startWaiting
   if (Auth.isAuthenticated()) {
     try {
       const data               = await API.games.currentRound(CONFIG.GAME_SLUG);
@@ -1190,7 +1162,6 @@ async function enterWaiting() {
       if (data.commitHash)               state.commitHash = data.commitHash;
     } catch (err) {
       if (err.message === 'SESSION_EXPIRED') return;
-      // Stay with local RNG — mirrors Aviator offline fallback
       console.warn('[enterWaiting] API unavailable, using client RNG:', err.message);
     }
   }
@@ -1223,7 +1194,6 @@ async function enterCrashed() {
   cancelFakeTimers();
   UI.updateButtons();
 
-  // Reveal server seed for provable fairness
   if (state.currentRoundNumber && Auth.isAuthenticated()) {
     try {
       const data       = await API.games.reveal(CONFIG.GAME_SLUG, state.currentRoundNumber);
@@ -1232,7 +1202,6 @@ async function enterCrashed() {
     } catch { /**/ }
   }
 
-  // Re-fetch authoritative balance after crash — mirrors Aviator _doCrash pattern
   if (Auth.isAuthenticated()) {
     setTimeout(async () => {
       try {
@@ -1274,6 +1243,8 @@ function tick(now) {
     if (state.current === STATES.RUNNING) UI.updateButtons();
   }
 
+  // FIX: resizeCanvas is now safe to call every frame — it uses offsetWidth/Height
+  // which do not read from the canvas's own size, breaking the feedback loop.
   resizeCanvas();
   updateBallPosition(now);
   drawBackground(now);
@@ -1288,21 +1259,26 @@ function tick(now) {
 
 /* =====================================================
    16. BOOTSTRAP
-   Mirrors Aviator Game.start boot sequence exactly.
    ===================================================== */
 async function init() {
   initStars();
   resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
 
-  // Wire auth form + react to auth events
+  // FIX: Use ResizeObserver on the canvas PARENT instead of listening to window resize.
+  // This fires only when the container genuinely changes size (e.g. orientation change,
+  // browser chrome hide/show on mobile) — not every animation frame.
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => resizeCanvas());
+    ro.observe(canvas.parentElement);
+  } else {
+    // Fallback for older browsers
+    window.addEventListener('resize', resizeCanvas);
+  }
+
   AuthReactor.init();
-
-  // Wire optional fairness modal
   UI.wireFairnessModal();
 
   if (!Auth.isAuthenticated()) {
-    // Guest mode — show auth gate, game still runs visually
     UI.showAuthGate('Sign in to play.');
     gameLoopPaused = true;
     anim.lastTime  = performance.now();
@@ -1310,11 +1286,9 @@ async function init() {
     return;
   }
 
-  // Connect WebSocket — mirrors Aviator _startNetworking
   WSBus.connect(() => {
     Wallet.subscribe();
 
-    // Server-authoritative crash — mirrors Aviator CrashRound.subscribeToState
     WSBus.subscribe(`/topic/${CONFIG.GAME_SLUG}/state`, msg => {
       try {
         const payload = JSON.parse(msg.body);
@@ -1324,7 +1298,6 @@ async function init() {
           enterCrashed();
         }
 
-        // Server multiplier tick → check auto-cashout
         if (payload.state === 'RUNNING' && payload.multiplier !== undefined) {
           const serverMult = parseFloat(payload.multiplier);
           for (let i = 0; i < 2; i++) {
@@ -1337,10 +1310,8 @@ async function init() {
     });
   });
 
-  // Load real wallet balance — GET /api/wallet
   await Wallet.fetch();
 
-  // Seed history display with local RNG values
   for (let i = 0; i < 6; i++) addHistory(RNG.generateCrashPointSync());
 
   await enterWaiting();

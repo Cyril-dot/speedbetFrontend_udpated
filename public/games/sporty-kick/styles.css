@@ -44,6 +44,9 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 24px;
+
+  /* Canvas height token — change in one place */
+  --canvas-h: 400px;
 }
 
 html, body {
@@ -68,7 +71,6 @@ html, body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
 /* ── Header ───────────────────────────────────────── */
@@ -82,6 +84,7 @@ html, body {
   position: sticky;
   top: 0;
   z-index: 100;
+  flex-shrink: 0;
 }
 
 .logo {
@@ -144,7 +147,12 @@ html, body {
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   flex-wrap: nowrap;
+  flex-shrink: 0;
+  /* hide scrollbar but keep scrollable */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+#history-bar::-webkit-scrollbar { display: none; }
 
 .history-label {
   font-size: 10px;
@@ -178,11 +186,11 @@ html, body {
 
 /* ── Main Layout ──────────────────────────────────── */
 #main {
-  flex: 1;
   display: grid;
   grid-template-columns: 1fr 300px;
-  gap: 0;
-  min-height: 460px;
+  /* KEY FIX: explicit height so the grid doesn't grow with canvas */
+  height: var(--canvas-h);
+  flex-shrink: 0;
 }
 
 /* ── Canvas Section ───────────────────────────────── */
@@ -190,14 +198,16 @@ html, body {
   position: relative;
   background: var(--bg-deep);
   border-right: 1px solid var(--border);
+  /* Contain to grid cell — no overflow */
   overflow: hidden;
+  height: 100%;
 }
 
 #game-canvas {
   display: block;
+  /* Fill the container exactly — no min-height that can expand */
   width: 100%;
   height: 100%;
-  min-height: 420px;
 }
 
 /* ── Multiplier Overlay ───────────────────────────── */
@@ -324,7 +334,8 @@ html, body {
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
-  padding: 0;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .bet-slot {
@@ -338,6 +349,7 @@ html, body {
 .slot-divider {
   height: 1px;
   background: var(--border);
+  flex-shrink: 0;
 }
 
 .slot-header {
@@ -392,6 +404,8 @@ html, body {
   font-weight: 600;
   padding: 10px 0;
   width: 100%;
+  /* Prevent zoom on iOS */
+  font-size: max(16px, 1rem);
 }
 .bet-input:disabled { opacity: 0.4; }
 
@@ -414,6 +428,9 @@ html, body {
   cursor: pointer;
   transition: all 0.15s;
   letter-spacing: 0.5px;
+  /* Touch-friendly min height */
+  min-height: 36px;
+  touch-action: manipulation;
 }
 .qbtn:hover {
   background: var(--border);
@@ -449,6 +466,8 @@ html, body {
   font-weight: 600;
   width: 55px;
   text-align: right;
+  /* Prevent zoom on iOS */
+  font-size: max(16px, 13px);
 }
 .auto-input::placeholder { color: var(--text-muted); }
 .auto-input:disabled { opacity: 0.4; }
@@ -471,6 +490,10 @@ html, body {
   text-transform: uppercase;
   cursor: pointer;
   transition: all 0.15s;
+  /* Prevent tap highlight on mobile */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 48px;
 }
 .action-btn:active { transform: scale(0.97); }
 .action-btn:disabled { opacity: 0.35; cursor: default; transform: none; }
@@ -514,6 +537,7 @@ html, body {
   background: var(--bg-dark);
   border-top: 1px solid var(--border);
   padding: 12px 20px;
+  flex-shrink: 0;
 }
 
 .lb-header {
@@ -537,7 +561,10 @@ html, body {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+#lb-list::-webkit-scrollbar { display: none; }
 
 .lb-item {
   background: var(--bg-card);
@@ -574,26 +601,125 @@ html, body {
 .lb-mult { font-family: var(--font-mono); font-weight: 600; }
 .lb-profit { font-family: var(--font-mono); font-size: 11px; color: var(--green); }
 
-/* ── Responsive ───────────────────────────────────── */
-@media (max-width: 768px) {
+/* ── Balance flash animations ─────────────────────── */
+@keyframes winBump {
+  0%   { color: var(--green); transform: scale(1); }
+  40%  { color: var(--green); transform: scale(1.12); }
+  100% { color: var(--green); transform: scale(1); }
+}
+@keyframes loseBump {
+  0%   { color: var(--red); }
+  100% { color: var(--green); }
+}
+.win-bump  { animation: winBump 0.4s ease; }
+.lose-bump { animation: loseBump 0.6s ease; }
+
+/* ============================================================
+   RESPONSIVE — MOBILE FIRST
+   ============================================================ */
+
+/* ── Tablet / small desktop (≤ 900px) ──────────────── */
+@media (max-width: 900px) {
+  :root { --canvas-h: 360px; }
+
   #main {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+    grid-template-columns: 1fr 260px;
   }
-  #canvas-wrap { border-right: none; border-bottom: 1px solid var(--border); }
-  #game-canvas { min-height: 280px; }
-  #mult-value { font-size: 52px; }
-  #bet-panel { flex-direction: row; }
-  .bet-slot { flex: 1; }
-  .slot-divider { width: 1px; height: auto; }
-  #leaderboard { display: none; }
 }
 
+/* ── Mobile landscape + large phone (≤ 768px) ──────── */
+@media (max-width: 768px) {
+  :root { --canvas-h: 280px; }
+
+  /* Stack canvas above bet panel */
+  #main {
+    display: flex;
+    flex-direction: column;
+    height: auto;          /* let content dictate height when stacked */
+  }
+
+  #canvas-wrap {
+    width: 100%;
+    height: var(--canvas-h);
+    flex-shrink: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #game-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  #mult-value { font-size: 52px; }
+
+  /* Bet panel: side by side on landscape */
+  #bet-panel {
+    flex-direction: row;
+    height: auto;
+    overflow-y: visible;
+    max-height: none;
+  }
+  .bet-slot {
+    flex: 1;
+    padding: 14px 12px;
+    gap: 9px;
+  }
+  .slot-divider { width: 1px; height: auto; }
+
+  /* Leaderboard hidden on tablet/small screens */
+  #leaderboard { display: none; }
+
+  /* Live feed narrower */
+  #live-feed { width: 120px; }
+  .feed-item { font-size: 10px; padding: 4px 8px; }
+}
+
+/* ── Small phone portrait (≤ 480px) ────────────────── */
 @media (max-width: 480px) {
-  #bet-panel { flex-direction: column; }
-  .slot-divider { width: auto; height: 1px; }
+  :root { --canvas-h: 240px; }
+
   #header { padding: 10px 14px; }
-  .logo-text { font-size: 18px; }
+  .logo-text { font-size: 17px; }
+  .logo-icon { font-size: 20px; }
+
+  .balance-pill { padding: 6px 12px; gap: 6px; }
+  .balance-label { display: none; }   /* save space — value alone is enough */
+  .balance-value { font-size: 14px; }
+
+  #history-bar { padding: 8px 14px; gap: 8px; }
+  .hist-item { font-size: 11px; padding: 3px 8px; }
+
+  /* Single column bet panel on portrait phone */
+  #bet-panel {
+    flex-direction: column;
+    height: auto;
+  }
+  .slot-divider { width: auto; height: 1px; }
+  .bet-slot { flex: none; padding: 14px; gap: 10px; }
+
+  #mult-value { font-size: 44px; letter-spacing: -1px; }
+  #status-label { font-size: 10px; letter-spacing: 1px; }
+
+  /* Live feed hidden on tiny screens — too cluttered */
+  #live-feed { display: none; }
+
+  /* Fair hash shortened */
+  #fair-val { max-width: 100px; }
+
+  /* Quicker buttons slightly taller for fat fingers */
+  .qbtn { padding: 8px 4px; font-size: 12px; }
+  .action-btn { font-size: 15px; padding: 12px; }
+
+  /* Auto cashout label shorter */
+  .auto-label { font-size: 10px; }
+}
+
+/* ── Very small phone (≤ 360px) ─────────────────────── */
+@media (max-width: 360px) {
+  :root { --canvas-h: 200px; }
+  #mult-value { font-size: 36px; }
+  .logo-text { font-size: 15px; }
 }
 
 /* ── Number input arrows hidden ───────────────────── */

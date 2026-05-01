@@ -21,6 +21,14 @@ import SponsorMarquee, { TeamMarquee } from '../components/SponsorMarquee';
 import HomeCarousel from '../components/HomeCarousel';
 import { GAME_TILE_ART } from '../components/GameTileArt';
 
+// ─── Top 6 league helpers ─────────────────────────────────────────────────────
+import {
+  resolveHardcodedLogo,
+  isTop6LeagueMatch,
+  TEAM_LOGOS,
+  TOP6_LEAGUES,
+} from '../data/TOP_6_LEAGUES_DATA';
+
 // ─── Arcade games ─────────────────────────────────────────────────────────────
 const arcadeGames = [
   { slug: 'aviator',          name: 'Aviator',          family: 'crash',   max_payout: '1000x', desc: 'Cash out before the crash. The longer you wait, the higher the multiplier.' },
@@ -41,6 +49,7 @@ const CUP_CHAMPIONSHIP_KEYWORDS = [
   'carabao', 'league cup', 'super cup', 'supercup', 'libertadores',
   'europa', 'conference', 'world cup', 'nations', 'shield', 'trophy',
   'final', 'playoff', 'play-off', 'knockout', 'ucl', 'uel', 'uecl',
+  'premier league', 'la liga', 'bundesliga', 'serie a', 'ligue 1', 'ligue1',
 ];
 
 // ─── Demo / hardcoded matches to suppress ────────────────────────────────────
@@ -50,9 +59,31 @@ const DEMO_MATCH_PAIRS = [
   ['Barcelona',     'Real Madrid'],
 ];
 
+// ─── Resolve raw API field variations ────────────────────────────────────────
+function resolveTeamName(m, side) {
+  const isHome = side === 'home';
+  return (
+    (isHome ? m.homeTeam : m.awayTeam) ??
+    (isHome ? m.home?.name : m.away?.name) ??
+    (isHome ? m.home_name : m.away_name) ??
+    (isHome ? m.team_home : m.team_away) ??
+    ''
+  );
+}
+
+function resolveTeamLogo(m, side) {
+  const isHome = side === 'home';
+  return (
+    (isHome ? m.homeLogo : m.awayLogo) ??
+    (isHome ? m.home?.logo : m.away?.logo) ??
+    (isHome ? m.home_logo : m.away_logo) ??
+    ''
+  );
+}
+
 function isDemoMatch(m) {
-  const home = m.home?.name ?? '';
-  const away = m.away?.name ?? '';
+  const home = resolveTeamName(m, 'home');
+  const away = resolveTeamName(m, 'away');
   return DEMO_MATCH_PAIRS.some(
     ([dh, da]) => home.includes(dh) && away.includes(da)
   );
@@ -63,21 +94,113 @@ export function isCupOrChampionship(leagueName = '') {
   return CUP_CHAMPIONSHIP_KEYWORDS.some((kw) => l.includes(kw));
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Enrich a single team object with hardcoded logo if API logo is missing ──
+function enrichTeam(teamObj) {
+  if (!teamObj) return teamObj;
+  if (teamObj.logo) return teamObj; // API already provided a logo — keep it
+  const hardcoded = resolveHardcodedLogo(teamObj.name);
+  if (hardcoded) return { ...teamObj, logo: hardcoded };
+  return teamObj;
+}
+
+// ─── Adapt raw API match to normalised shape, then enrich logos ───────────────
 function adaptMatch(m) {
+  const homeName = resolveTeamName(m, 'home');
+  const awayName = resolveTeamName(m, 'away');
+  const homeLogo = resolveTeamLogo(m, 'home');
+  const awayLogo = resolveTeamLogo(m, 'away');
+
+  const league =
+    m.league ??
+    m.competition?.name ??
+    m.league_name ??
+    '';
+
+  const scoreHome =
+    m.scoreHome ?? m.score?.home ?? m.score_home ?? null;
+  const scoreAway =
+    m.scoreAway ?? m.score?.away ?? m.score_away ?? null;
+
+  const kickoff =
+    m.kickoffAt ?? m.kickoff ?? m.kick_off ?? m.startTime ?? null;
+
+  const minute =
+    m.minute ??
+    m.metadata?.current_minute ??
+    m.metadata?.['current_minute'] ??
+    null;
+
+  const rawHome = {
+    name:  homeName,
+    short: (m.home?.short ?? homeName.slice(0, 3)).toUpperCase(),
+    color: m.home?.color ?? '#888',
+    logo:  homeLogo,
+  };
+
+  const rawAway = {
+    name:  awayName,
+    short: (m.away?.short ?? awayName.slice(0, 3)).toUpperCase(),
+    color: m.away?.color ?? '#888',
+    logo:  awayLogo,
+  };
+
   return {
-    id:       m.id ?? m.externalId ?? `match-${Math.random().toString(36).slice(2)}`,
-    status:   m.status,
-    league:   m.league,
-    home:     { name: m.homeTeam, short: m.homeTeam?.slice(0, 3).toUpperCase(), color: '#888', logo: m.homeLogo },
-    away:     { name: m.awayTeam, short: m.awayTeam?.slice(0, 3).toUpperCase(), color: '#888', logo: m.awayLogo },
-    score:    { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
-    minute:   m.metadata?.['current_minute'] ?? null,
-    kickoff:  m.kickoffAt,
-    odds:     m.odds ?? null,
+    id:      m.id ?? m.externalId ?? `match-${Math.random().toString(36).slice(2)}`,
+    status:  m.status ?? 'SCHEDULED',
+    league,
+    // ── Enrich logos from hardcoded map when API logo is absent ──────────────
+    home:    enrichTeam(rawHome),
+    away:    enrichTeam(rawAway),
+    score:   { home: scoreHome, away: scoreAway },
+    minute,
+    kickoff,
+    odds:    m.odds ?? null,
   };
 }
 
+// ─── Check if a match has at least one top-6 team (uses adapted shape) ────────
+function matchIsTop6(m) {
+  return isTop6LeagueMatch(m.home?.name ?? '', m.away?.name ?? '');
+}
+
+// ─── Fallback carousel slides built purely from hardcoded data ────────────────
+// Picks one high-profile fixture per league so the carousel is never empty.
+export function getFallbackCarouselMatches() {
+  return [
+    {
+      id: 'fallback-1', status: 'UPCOMING', league: 'Premier League',
+      home: { name: 'Arsenal',   logo: resolveHardcodedLogo('Arsenal'),   short: 'ARS', color: '#EF0107' },
+      away: { name: 'Liverpool', logo: resolveHardcodedLogo('Liverpool'),  short: 'LIV', color: '#C8102E' },
+      score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
+    },
+    {
+      id: 'fallback-2', status: 'UPCOMING', league: 'La Liga',
+      home: { name: 'Real Madrid', logo: resolveHardcodedLogo('Real Madrid'), short: 'RMA', color: '#FEBE10' },
+      away: { name: 'Barcelona',   logo: resolveHardcodedLogo('Barcelona'),   short: 'BAR', color: '#A50044' },
+      score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
+    },
+    {
+      id: 'fallback-3', status: 'UPCOMING', league: 'Bundesliga',
+      home: { name: 'Bayern Munich',      logo: resolveHardcodedLogo('Bayern Munich'),      short: 'BAY', color: '#DC052D' },
+      away: { name: 'Borussia Dortmund',  logo: resolveHardcodedLogo('Borussia Dortmund'),  short: 'BVB', color: '#FDE100' },
+      score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
+    },
+    {
+      id: 'fallback-4', status: 'UPCOMING', league: 'Serie A',
+      home: { name: 'Inter Milan', logo: resolveHardcodedLogo('Inter Milan'), short: 'INT', color: '#0068A8' },
+      away: { name: 'Juventus',    logo: resolveHardcodedLogo('Juventus'),    short: 'JUV', color: '#000000' },
+      score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
+    },
+    {
+      id: 'fallback-5', status: 'UPCOMING', league: 'Ligue 1',
+      home: { name: 'Paris Saint-Germain', logo: resolveHardcodedLogo('PSG'),       short: 'PSG', color: '#004170' },
+      away: { name: 'Marseille',           logo: resolveHardcodedLogo('Marseille'),  short: 'OM',  color: '#2faee0' },
+      score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
+    },
+  ];
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 function MatchSkeleton() {
   return (
     <div className="rounded-xl p-4 animate-pulse" style={{ background: 'var(--surface-0)', border: '1px solid var(--border)', minHeight: 110 }}>
@@ -112,6 +235,16 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
+    function adaptWithOdds(arr) {
+      return (arr ?? []).map((entry) => {
+        const raw     = entry.match ?? entry;
+        const odds    = entry.odds ?? raw.odds ?? null;
+        const adapted = adaptMatch(raw);
+        adapted.odds  = odds;
+        return adapted;
+      });
+    }
+
     async function load() {
       try {
         const [withOddsData, results] = await Promise.all([
@@ -121,18 +254,22 @@ export default function Home() {
 
         if (cancelled) return;
 
-        const adaptWithOdds = (arr) =>
-          (arr ?? []).map((entry) => {
-            const m = entry.match ?? entry;
-            const adapted = adaptMatch(m);
-            adapted.odds = entry.odds ?? m.odds ?? null;
-            return adapted;
-          });
+        const adaptedLive = adaptWithOdds(withOddsData?.live)
+          .filter((m) => !isDemoMatch(m));
 
-        // Filter out hardcoded demo matches
-        const adaptedLive     = adaptWithOdds(withOddsData?.live).filter((m) => !isDemoMatch(m));
-        const adaptedUpcoming = adaptWithOdds(withOddsData?.upcoming).filter((m) => !isDemoMatch(m)).slice(0, 6);
-        const adaptedEnded    = (results ?? []).map(adaptMatch).filter((m) => !isDemoMatch(m)).slice(0, 4);
+        // Sort upcoming: top-6 teams first → then any with logos → then rest
+        const allUpcoming = adaptWithOdds(withOddsData?.upcoming)
+          .filter((m) => !isDemoMatch(m));
+
+        const upTop6       = allUpcoming.filter((m) =>  matchIsTop6(m));
+        const upWithLogos  = allUpcoming.filter((m) => !matchIsTop6(m) && m.home?.logo && m.away?.logo);
+        const upRest       = allUpcoming.filter((m) => !matchIsTop6(m) && (!m.home?.logo || !m.away?.logo));
+        const adaptedUpcoming = [...upTop6, ...upWithLogos, ...upRest].slice(0, 6);
+
+        const adaptedEnded = (results ?? [])
+          .map((m) => adaptMatch(m))
+          .filter((m) => !isDemoMatch(m))
+          .slice(0, 4);
 
         setLiveMatches(adaptedLive);
         setUpcomingMatches(adaptedUpcoming);
@@ -147,20 +284,18 @@ export default function Home() {
 
     load();
 
+    // Refresh live matches every 30 s
     const iv = setInterval(async () => {
       try {
         const data = await matchesApi.withOdds();
         if (!cancelled) {
-          const adaptWithOdds = (arr) =>
-            (arr ?? []).map((entry) => {
-              const m = entry.match ?? entry;
-              const adapted = adaptMatch(m);
-              adapted.odds = entry.odds ?? m.odds ?? null;
-              return adapted;
-            });
+          const live = (data?.live ?? []).map((entry) => {
+            const raw     = entry.match ?? entry;
+            const adapted = adaptMatch(raw);
+            adapted.odds  = entry.odds ?? raw.odds ?? null;
+            return adapted;
+          }).filter((m) => !isDemoMatch(m));
 
-          // Filter out hardcoded demo matches in polling too
-          const live = adaptWithOdds(data?.live).filter((m) => !isDemoMatch(m));
           setLiveMatches(live);
           setAllMatches((prev) => {
             const upcoming = prev.filter((m) => m.status !== 'LIVE');
@@ -180,20 +315,25 @@ export default function Home() {
   // GSAP animations after load
   useEffect(() => {
     if (!loading) {
-      if (quickNavRef.current) staggerFadeIn(quickNavRef.current.children);
-      if (liveSectionRef.current) scrollFadeIn(liveSectionRef.current);
+      if (quickNavRef.current)      staggerFadeIn(quickNavRef.current.children);
+      if (liveSectionRef.current)   scrollFadeIn(liveSectionRef.current);
       if (upcomingSectionRef.current) scrollFadeIn(upcomingSectionRef.current);
-      if (gamesSectionRef.current) scrollScaleIn(gamesSectionRef.current);
+      if (gamesSectionRef.current)  scrollScaleIn(gamesSectionRef.current);
     }
   }, [loading]);
 
-  // Only cup / championship matches go into the carousel
-  const carouselMatches = allMatches.filter((m) => isCupOrChampionship(m.league));
+  // ── Carousel: prefer top-6 / cup matches from API; fall back to hardcoded ──
+  const apiCarouselMatches = allMatches.filter(
+    (m) => isCupOrChampionship(m.league) || matchIsTop6(m)
+  );
+  const carouselMatches = apiCarouselMatches.length > 0
+    ? apiCarouselMatches
+    : getFallbackCarouselMatches();
 
   return (
     <div className="w-full overflow-x-hidden" style={{ background: 'var(--surface-1)' }}>
 
-      {/* ═══ HERO CAROUSEL — cup & championship games only ═══ */}
+      {/* ═══ HERO CAROUSEL ═══ */}
       <HomeCarousel matches={carouselMatches} />
 
       {/* ═══ QUICK NAV STRIP ═══ */}
@@ -216,19 +356,9 @@ export default function Home() {
               key={q.label}
               to={q.to}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors"
-              style={{
-                background: 'var(--surface-2)',
-                color: 'var(--text-100)',
-                textDecoration: 'none',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = q.accent;
-                e.currentTarget.style.color = '#fff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--surface-2)';
-                e.currentTarget.style.color = 'var(--text-100)';
-              }}
+              style={{ background: 'var(--surface-2)', color: 'var(--text-100)', textDecoration: 'none' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = q.accent; e.currentTarget.style.color = '#fff'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-100)'; }}
             >
               <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: q.accent }} />
               {q.label}
