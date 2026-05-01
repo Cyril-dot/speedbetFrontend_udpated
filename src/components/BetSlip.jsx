@@ -2,9 +2,9 @@ import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../store';
 import { fmtMoney, fmtMoneyWithCode } from '../utils';
-import { booking } from '../api'; // ← SpeedBet API service
+import { booking } from '../api';
 
-// ─── Icons (inline, no external deps) ────────────────────────────────────────
+// ─── Icons ────────────────────────────────────────────────────────────────────
 
 const Icon = {
   Close: ({ size = 14 }) => (
@@ -83,7 +83,7 @@ const Icon = {
   ),
 };
 
-// ─── Tiny Confetti ─────────────────────────────────────────────────────────────
+// ─── Confetti ─────────────────────────────────────────────────────────────────
 
 function Confetti() {
   const pieces = Array.from({ length: 16 }, (_, i) => ({
@@ -102,13 +102,8 @@ function Confetti() {
           animate={{ y: 360, opacity: 0, rotate: 720 }}
           transition={{ duration: p.dur, delay: p.delay, repeat: Infinity, ease: 'linear' }}
           style={{
-            position: 'absolute',
-            left: `${p.left}%`,
-            top: 0,
-            width: 5,
-            height: 10,
-            background: p.color,
-            borderRadius: 2,
+            position: 'absolute', left: `${p.left}%`, top: 0,
+            width: 5, height: 10, background: p.color, borderRadius: 2,
           }}
         />
       ))}
@@ -116,7 +111,7 @@ function Confetti() {
   );
 }
 
-// ─── Result display config ────────────────────────────────────────────────────
+// ─── Result config ────────────────────────────────────────────────────────────
 
 const RESULT_CONFIG = {
   WON:       { color: '#22d77a', bg: 'rgba(34,215,122,0.05)',  border: 'rgba(34,215,122,0.2)',  label: 'Won',       icon: (s) => <Icon.Check size={s} /> },
@@ -132,26 +127,19 @@ function getResultConfig(result) {
   return RESULT_CONFIG[result] ?? RESULT_CONFIG.PENDING;
 }
 
-// ─── Shared label builder ─────────────────────────────────────────────────────
-// Used for BOTH slip items (before placing) and settled bet selections.
-// Checks every field name the backend or store might use, in priority order.
+// ─── Label helpers ────────────────────────────────────────────────────────────
 
 function buildMatchLabel(s) {
   if (!s) return 'Unknown match';
-  // Explicit label fields (set by booking code loader or normaliser)
   if (s.matchLabel)   return s.matchLabel;
   if (s.match_label)  return s.match_label;
   if (s.match)        return s.match;
-  // Team pair — camelCase (Spring Jackson default) or snake_case
-  const home = s.homeTeam  ?? s.home_team;
-  const away = s.awayTeam  ?? s.away_team;
+  const home = s.homeTeam ?? s.home_team;
+  const away = s.awayTeam ?? s.away_team;
   if (home && away)   return `${home} vs ${away}`;
-  // Last resort — short ID suffix so it's at least identifiable
   const id = s.matchId ?? s.match_id ?? '';
   return id ? `Match …${String(id).slice(-6)}` : 'Unknown match';
 }
-
-// ─── Normalise a settled bet from the API ─────────────────────────────────────
 
 function normaliseBet(bet) {
   if (!bet) return bet;
@@ -176,18 +164,16 @@ function BookingCodeLoader({ onLoaded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
   const [preview, setPreview] = useState(null);
-  const currency              = useStore((s) => s.currency);
-  const addToSlip             = useStore((s) => s.addToSlip);
-  const clearSlip             = useStore((s) => s.clearSlip);
-  const pushToast             = useStore((s) => s.pushToast);
-  const inputRef              = useRef(null);
+  const currency  = useStore((s) => s.currency);
+  const addToSlip = useStore((s) => s.addToSlip);
+  const clearSlip = useStore((s) => s.clearSlip);
+  const pushToast = useStore((s) => s.pushToast);
+  const inputRef  = useRef(null);
 
   const handleLoad = async () => {
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) { inputRef.current?.focus(); return; }
-    setLoading(true);
-    setError(null);
-    setPreview(null);
+    setLoading(true); setError(null); setPreview(null);
     try {
       const res = await booking.redeem(trimmed);
       setPreview(res);
@@ -203,7 +189,6 @@ function BookingCodeLoader({ onLoaded }) {
     const selections = preview.enrichedSelections.map((sel) => ({
       id:          `${sel.matchId}-${sel.market}-${sel.selection}`,
       matchId:     sel.matchId,
-      // Always resolve to a human label right here so slip rows show team names
       match_label: buildMatchLabel(sel),
       market:      sel.market,
       selection:   sel.selection,
@@ -212,8 +197,7 @@ function BookingCodeLoader({ onLoaded }) {
     }));
     onLoaded(selections, preview.booking);
     pushToast({ variant: 'win', title: 'Slip loaded!', message: `${selections.length} selection${selections.length !== 1 ? 's' : ''} added from code ${preview.booking.code}` });
-    setPreview(null);
-    setCode('');
+    setPreview(null); setCode('');
   };
 
   return (
@@ -222,11 +206,7 @@ function BookingCodeLoader({ onLoaded }) {
         <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-60)', display: 'block', marginBottom: 5 }}>
           Enter Booking Code
         </label>
-        <div style={{
-          display: 'flex', gap: 6,
-          background: 'var(--surface-1)', border: '1.5px solid var(--border-bright)',
-          borderRadius: 8, overflow: 'hidden',
-        }}>
+        <div style={{ display: 'flex', gap: 6, background: 'var(--surface-1)', border: '1.5px solid var(--border-bright)', borderRadius: 8, overflow: 'hidden' }}>
           <input
             ref={inputRef}
             value={code}
@@ -234,21 +214,12 @@ function BookingCodeLoader({ onLoaded }) {
             onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
             placeholder="e.g. SPDB-XK92"
             maxLength={20}
-            style={{
-              flex: 1, outline: 'none', background: 'transparent', border: 'none',
-              fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'white',
-              padding: '9px 10px', minWidth: 0, letterSpacing: '0.08em',
-            }}
+            style={{ flex: 1, outline: 'none', background: 'transparent', border: 'none', fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: 'white', padding: '9px 10px', minWidth: 0, letterSpacing: '0.08em' }}
           />
           <button
             onClick={handleLoad}
             disabled={loading || !code.trim()}
-            style={{
-              padding: '9px 14px', background: 'var(--grad-primary)', border: 'none',
-              color: '#fff', fontWeight: 700, fontSize: 11, cursor: loading || !code.trim() ? 'not-allowed' : 'pointer',
-              opacity: loading || !code.trim() ? 0.55 : 1, transition: 'opacity 0.15s',
-              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-            }}
+            style={{ padding: '9px 14px', background: 'var(--grad-primary)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, cursor: loading || !code.trim() ? 'not-allowed' : 'pointer', opacity: loading || !code.trim() ? 0.55 : 1, transition: 'opacity 0.15s', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
           >
             {loading
               ? <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} style={{ display: 'flex' }}><Icon.Loader size={13} /></motion.span>
@@ -260,39 +231,20 @@ function BookingCodeLoader({ onLoaded }) {
 
       <AnimatePresence>
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            style={{
-              padding: '9px 12px', borderRadius: 8, marginBottom: 10,
-              background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.22)',
-              fontSize: 11, color: '#DC2626', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <Icon.X size={11} />
-            {error}
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            style={{ padding: '9px 12px', borderRadius: 8, marginBottom: 10, background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.22)', fontSize: 11, color: '#DC2626', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon.X size={11} />{error}
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {preview && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            style={{
-              background: 'var(--surface-2)', border: '1px solid var(--border)',
-              borderRadius: 10, overflow: 'hidden',
-            }}
-          >
-            <div style={{
-              padding: '10px 12px', borderBottom: '1px solid var(--border)',
-              background: 'rgba(34,215,122,0.04)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(34,215,122,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#22d77a', letterSpacing: '0.1em' }}>
-                  {preview.booking.code}
-                </div>
+                <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#22d77a', letterSpacing: '0.1em' }}>{preview.booking.code}</div>
                 <div style={{ fontSize: 9, color: 'var(--text-60)', marginTop: 2 }}>
                   {preview.booking.label} · expires {new Date(preview.booking.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
@@ -304,7 +256,6 @@ function BookingCodeLoader({ onLoaded }) {
                 </div>
               </div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', padding: '8px 12px', gap: 4, borderBottom: '1px solid var(--border)' }}>
               {[
                 { label: 'Selections', value: preview.enrichedSelections.length },
@@ -317,58 +268,24 @@ function BookingCodeLoader({ onLoaded }) {
                 </div>
               ))}
             </div>
-
             <div style={{ maxHeight: 220, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
               {preview.enrichedSelections.map((sel, i) => (
-                <div key={i} style={{
-                  padding: '8px 10px', borderRadius: 8,
-                  background: 'var(--surface-1)', border: '1px solid var(--border)',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <div style={{
-                    width: 18, height: 18, borderRadius: 9,
-                    background: 'var(--surface-3)', color: 'var(--text-60)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 8, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0,
-                  }}>
-                    {i + 1}
-                  </div>
+                <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--surface-1)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 9, background: 'var(--surface-3)', color: 'var(--text-60)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
-                      {sel.market}
-                    </div>
-                    {/* Use buildMatchLabel so booking code previews also show team names */}
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {buildMatchLabel(sel)}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-60)', marginTop: 1 }}>
-                      Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span>
-                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{sel.market}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{buildMatchLabel(sel)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-60)', marginTop: 1 }}>Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span></div>
                   </div>
-                  <div style={{
-                    fontFamily: 'monospace', fontWeight: 700, fontSize: 11,
-                    padding: '3px 7px', borderRadius: 6,
-                    background: 'var(--surface-3)', border: '1px solid var(--border)',
-                    color: 'var(--brand)', flexShrink: 0,
-                  }}>
+                  <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, padding: '3px 7px', borderRadius: 6, background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--brand)', flexShrink: 0 }}>
                     {(sel.currentOdds ?? sel.odds ?? sel.submittedOdds ?? 1).toFixed(2)}
                   </div>
                 </div>
               ))}
             </div>
-
-            <div style={{ padding: '10px 10px 10px' }}>
-              <button
-                onClick={handleAddToSlip}
-                style={{
-                  width: '100%', padding: '10px', borderRadius: 8,
-                  background: 'var(--grad-primary)', border: 'none',
-                  color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                }}
-              >
-                <Icon.Check size={12} />
-                Add {preview.enrichedSelections.length} Selection{preview.enrichedSelections.length !== 1 ? 's' : ''} to Slip
+            <div style={{ padding: '10px' }}>
+              <button onClick={handleAddToSlip} style={{ width: '100%', padding: '10px', borderRadius: 8, background: 'var(--grad-primary)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Icon.Check size={12} />Add {preview.enrichedSelections.length} Selection{preview.enrichedSelections.length !== 1 ? 's' : ''} to Slip
               </button>
             </div>
           </motion.div>
@@ -376,16 +293,10 @@ function BookingCodeLoader({ onLoaded }) {
       </AnimatePresence>
 
       {!preview && !error && !loading && (
-        <div style={{
-          marginTop: 12, padding: '14px 12px', borderRadius: 10,
-          background: 'var(--surface-2)', border: '1px dashed var(--border-bright)',
-          textAlign: 'center',
-        }}>
+        <div style={{ marginTop: 12, padding: '14px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px dashed var(--border-bright)', textAlign: 'center' }}>
           <div style={{ color: 'var(--text-60)', marginBottom: 6 }}><Icon.Code size={22} /></div>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-80)', marginBottom: 3 }}>Load a Booking Code</div>
-          <div style={{ fontSize: 10, color: 'var(--text-60)', lineHeight: 1.5 }}>
-            Enter a code shared by your bookie to instantly load a pre-built slip.
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-60)', lineHeight: 1.5 }}>Enter a code shared by your bookie to instantly load a pre-built slip.</div>
         </div>
       )}
     </div>
@@ -397,86 +308,42 @@ function BookingCodeLoader({ onLoaded }) {
 function BetDetailModal({ bet: rawBet, onClose }) {
   const currency = useStore((s) => s.currency);
   const bet = normaliseBet(rawBet);
-
-  const statusColor = {
-    PENDING: '#FFB300',
-    WON:     '#22d77a',
-    LOST:    '#DC2626',
-    VOID:    '#9CA3AF',
-  }[bet.status] ?? '#9CA3AF';
+  const statusColor = { PENDING: '#FFB300', WON: '#22d77a', LOST: '#DC2626', VOID: '#9CA3AF' }[bet.status] ?? '#9CA3AF';
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 300,
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        background: 'rgba(5,8,12,0.82)', backdropFilter: 'blur(6px)',
-      }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(5,8,12,0.82)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 300, damping: 32 }}
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 440, maxHeight: '88vh',
-          background: 'var(--surface-1)', border: '1px solid var(--border)',
-          borderRadius: '18px 18px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}
+        style={{ width: '100%', maxWidth: 440, maxHeight: '88vh', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: '18px 18px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
-        {/* drag handle */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-bright)' }} />
         </div>
-
-        {/* header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 16px', borderBottom: '1px solid var(--border)',
-          background: 'var(--surface-2)', flexShrink: 0,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0 }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-100)' }}>Slip Details</div>
-            <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-60)', marginTop: 2 }}>
-              #{bet.id?.slice(-8).toUpperCase()}
-            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-60)', marginTop: 2 }}>#{bet.id?.slice(-8).toUpperCase()}</div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              width: 28, height: 28, borderRadius: 14,
-              background: 'var(--surface-3)', border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-80)', cursor: 'pointer',
-            }}
-          >
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 14, background: 'var(--surface-3)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-80)', cursor: 'pointer' }}>
             <Icon.Close size={12} />
           </button>
         </div>
-
-        {/* body */}
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-
           {bet.status === 'WON' && (
             <div style={{ position: 'relative', textAlign: 'center', padding: '20px 16px 16px', background: 'rgba(34,215,122,0.06)' }}>
               <Confetti />
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <div style={{ color: '#22d77a', marginBottom: 6 }}><Icon.Trophy size={36} /></div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: '#22d77a', marginBottom: 4, textTransform: 'uppercase' }}>You Won</div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#22d77a', fontFamily: 'monospace' }}>
-                  {fmtMoneyWithCode(bet.potentialReturn ?? 0, currency)}
-                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#22d77a', fontFamily: 'monospace' }}>{fmtMoneyWithCode(bet.potentialReturn ?? 0, currency)}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginTop: 12, padding: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
-                  {[
-                    { label: 'Odds',   value: `${(bet.totalOdds ?? 0).toFixed(2)}×` },
-                    { label: 'Stake',  value: fmtMoney(bet.stake) },
-                    { label: 'Profit', value: fmtMoney((bet.potentialReturn ?? 0) - bet.stake) },
-                  ].map((s) => (
+                  {[{ label: 'Odds', value: `${(bet.totalOdds ?? 0).toFixed(2)}×` }, { label: 'Stake', value: fmtMoney(bet.stake) }, { label: 'Profit', value: fmtMoney((bet.potentialReturn ?? 0) - bet.stake) }].map((s) => (
                     <div key={s.label} style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 9, color: 'var(--text-60)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{s.label}</div>
                       <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, color: 'var(--text-100)' }}>{s.value}</div>
@@ -486,7 +353,6 @@ function BetDetailModal({ bet: rawBet, onClose }) {
               </div>
             </div>
           )}
-
           {bet.status === 'LOST' && (
             <div style={{ margin: '16px 16px 0', padding: 16, textAlign: 'center', background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.18)', borderRadius: 12 }}>
               <div style={{ color: '#DC2626', marginBottom: 6 }}><Icon.X size={32} /></div>
@@ -494,7 +360,6 @@ function BetDetailModal({ bet: rawBet, onClose }) {
               <div style={{ fontSize: 11, color: 'var(--text-60)' }}>Stake of {fmtMoneyWithCode(bet.stake, currency)} lost</div>
             </div>
           )}
-
           {bet.status === 'PENDING' && (
             <div style={{ margin: '16px 16px 0', padding: 16, textAlign: 'center', background: 'rgba(255,177,0,0.06)', border: '1px solid rgba(255,177,0,0.18)', borderRadius: 12 }}>
               <div style={{ color: '#FFB300', marginBottom: 6 }}><Icon.Clock size={28} /></div>
@@ -502,18 +367,13 @@ function BetDetailModal({ bet: rawBet, onClose }) {
               <div style={{ fontSize: 11, color: 'var(--text-60)' }}>Potential: {fmtMoneyWithCode(bet.potentialReturn ?? 0, currency)}</div>
             </div>
           )}
-
           {bet.status === 'VOID' && (
             <div style={{ margin: '16px 16px 0', padding: 16, textAlign: 'center', background: 'rgba(156,163,175,0.06)', border: '1px solid rgba(156,163,175,0.18)', borderRadius: 12 }}>
               <div style={{ color: '#9CA3AF', marginBottom: 6 }}><Icon.Return size={28} /></div>
               <div style={{ fontWeight: 700, fontSize: 14, color: '#9CA3AF', marginBottom: 4 }}>Bet Voided</div>
-              <div style={{ fontSize: 11, color: 'var(--text-60)' }}>
-                Stake of {fmtMoneyWithCode(bet.stake, currency)} has been returned to your wallet
-              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-60)' }}>Stake of {fmtMoneyWithCode(bet.stake, currency)} has been returned to your wallet</div>
             </div>
           )}
-
-          {/* info grid */}
           <div style={{ padding: '12px 16px 0' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
               {[
@@ -529,8 +389,6 @@ function BetDetailModal({ bet: rawBet, onClose }) {
               ))}
             </div>
           </div>
-
-          {/* selections */}
           <div style={{ padding: '12px 16px 20px' }}>
             <div style={{ fontSize: 9, color: 'var(--text-60)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 8 }}>
               {bet.selections.length} Selection{bet.selections.length !== 1 ? 's' : ''}
@@ -540,54 +398,23 @@ function BetDetailModal({ bet: rawBet, onClose }) {
                 const result = sel.result || 'PENDING';
                 const cfg = getResultConfig(result);
                 return (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: 10,
-                    background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 10,
-                  }}>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: 10,
-                      background: `${cfg.color}22`, color: cfg.color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      {cfg.icon(11)}
-                    </div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 10 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 10, background: `${cfg.color}22`, color: cfg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{cfg.icon(11)}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: 9, color: 'var(--text-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                          {sel.market || 'Match'}
-                        </span>
+                        <span style={{ fontSize: 9, color: 'var(--text-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{sel.market || 'Match'}</span>
                         {result !== 'PENDING' && (
-                          <span style={{
-                            fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                            background: `${cfg.color}22`, color: cfg.color,
-                            textTransform: 'uppercase', letterSpacing: '0.06em',
-                          }}>
-                            {cfg.label}
-                          </span>
+                          <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: `${cfg.color}22`, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cfg.label}</span>
                         )}
                       </div>
-                      {/* matchLabel always resolved to "Home vs Away" by normaliseBet */}
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {sel.matchLabel}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-60)', marginTop: 1 }}>
-                        Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span>
-                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel.matchLabel}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-60)', marginTop: 1 }}>Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span></div>
                     </div>
-                    <div style={{
-                      fontFamily: 'monospace', fontWeight: 700, fontSize: 11,
-                      padding: '3px 8px', borderRadius: 6,
-                      background: 'var(--surface-3)', border: '1px solid var(--border)',
-                      color: cfg.color, flexShrink: 0,
-                    }}>
-                      {sel.oddsLocked.toFixed(2)}
-                    </div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 6, background: 'var(--surface-3)', border: '1px solid var(--border)', color: cfg.color, flexShrink: 0 }}>{sel.oddsLocked.toFixed(2)}</div>
                   </div>
                 );
               })}
             </div>
-
-            {/* timeline */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
               {[
                 { label: 'Placed',  value: new Date(bet.placedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) },
@@ -601,30 +428,10 @@ function BetDetailModal({ bet: rawBet, onClose }) {
             </div>
           </div>
         </div>
-
-        {/* footer */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={onClose}
-            style={{
-              flex: 1, padding: '9px 12px', borderRadius: 8,
-              background: 'var(--surface-3)', border: '1px solid var(--border)',
-              color: 'var(--text-80)', fontWeight: 600, fontSize: 12, cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
+          <button onClick={onClose} style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-80)', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>Close</button>
           {bet.status === 'WON' && (
-            <button
-              onClick={() => useStore.getState().pushToast({ variant: 'win', title: 'Win shared!', message: 'Slip exported to your gallery.' })}
-              style={{
-                flex: 1, padding: '9px 12px', borderRadius: 8,
-                background: 'var(--grad-primary)', border: 'none',
-                color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-              }}
-            >
-              Share Win 🎉
-            </button>
+            <button onClick={() => useStore.getState().pushToast({ variant: 'win', title: 'Win shared!', message: 'Slip exported to your gallery.' })} style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: 'var(--grad-primary)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Share Win 🎉</button>
           )}
         </div>
       </motion.div>
@@ -655,50 +462,31 @@ function BetHistoryList({ bets: rawBets, tab, onView }) {
   }
 
   const statusColor = { PENDING: '#FFB300', WON: '#22d77a', LOST: '#DC2626', VOID: '#9CA3AF' };
-  const statusIcon  = {
-    PENDING: <Icon.Clock size={13} />,
-    WON:     <Icon.Check size={13} />,
-    LOST:    <Icon.X size={13} />,
-    VOID:    <Icon.Return size={13} />,
-  };
+  const statusIcon  = { PENDING: <Icon.Clock size={13} />, WON: <Icon.Check size={13} />, LOST: <Icon.X size={13} />, VOID: <Icon.Return size={13} /> };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
       {bets.map((bet) => {
         const sc = statusColor[bet.status] ?? '#9CA3AF';
         const si = statusIcon[bet.status]  ?? <Icon.Return size={13} />;
-        // Show first selection's match label as the card title
         const firstLabel = bet.selections[0]?.matchLabel ?? '—';
         const extraCount = bet.selections.length - 1;
-
         return (
           <motion.button
             key={bet.id}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={() => onView(bet)}
-            style={{
-              width: '100%', textAlign: 'left',
-              background: 'var(--surface-2)', border: '1px solid var(--border)',
-              borderLeft: `3px solid ${sc}`, borderRadius: 8, overflow: 'hidden',
-              cursor: 'pointer', display: 'block',
-            }}
+            style={{ width: '100%', textAlign: 'left', background: 'var(--surface-2)', border: '1px solid var(--border)', borderLeft: `3px solid ${sc}`, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', display: 'block' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px 8px' }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                background: `${sc}18`, color: sc,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {si}
-              </div>
+              <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, background: `${sc}18`, color: sc, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{si}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                   <span style={{ fontFamily: 'monospace', fontSize: 9, color: 'var(--text-60)' }}>#{bet.id?.slice(-6).toUpperCase()}</span>
                   <span style={{ fontSize: 9, color: 'var(--text-40)' }}>•</span>
                   <span style={{ fontSize: 9, color: 'var(--text-60)' }}>{new Date(bet.placedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                 </div>
-                {/* Show the actual match name(s) instead of "X-Leg" */}
                 <div style={{ fontWeight: 600, fontSize: 11, color: 'var(--text-100)', marginBottom: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {firstLabel}{extraCount > 0 ? ` +${extraCount} more` : ''}
                 </div>
@@ -712,14 +500,10 @@ function BetHistoryList({ bets: rawBets, tab, onView }) {
                   {bet.status === 'WON' ? 'Won' : bet.status === 'LOST' ? 'Lost' : bet.status === 'VOID' ? 'Refunded' : 'Pot.'}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, color: sc }}>
-                  {bet.status === 'LOST'
-                    ? fmtMoneyWithCode(bet.stake, currency)
-                    : fmtMoneyWithCode(bet.potentialReturn ?? bet.stake, currency)}
+                  {bet.status === 'LOST' ? fmtMoneyWithCode(bet.stake, currency) : fmtMoneyWithCode(bet.potentialReturn ?? bet.stake, currency)}
                 </div>
               </div>
-              <div style={{ color: 'var(--text-60)', flexShrink: 0, marginLeft: 2 }}>
-                <Icon.ChevronRight size={12} />
-              </div>
+              <div style={{ color: 'var(--text-60)', flexShrink: 0, marginLeft: 2 }}><Icon.ChevronRight size={12} /></div>
             </div>
           </motion.button>
         );
@@ -755,7 +539,6 @@ function BetSlipContent({ onClose, isMobile }) {
   const totalOdds = slip.reduce((p, s) => p * s.odds, 1);
   const stakeNum  = parseFloat(stake) || 0;
   const potential = stakeNum * totalOdds;
-
   const QUICK = [10, 50, 100, 500];
 
   const tabCounts = {
@@ -775,33 +558,18 @@ function BetSlipContent({ onClose, isMobile }) {
   };
 
   const handlePlace = async () => {
-    if (!stakeNum || stakeNum <= 0) {
-      pushToast({ variant: 'error', title: 'Enter a stake amount' });
-      stakeInputRef.current?.focus();
-      return;
-    }
-    if (!user) {
-      pushToast({ variant: 'error', title: 'Sign in to place a bet' });
-      return;
-    }
-    if (balance <= 0) {
-      pushToast({ variant: 'error', title: 'Wallet is empty', message: 'Please deposit funds to continue.' });
-      return;
-    }
-    if (stakeNum > balance) {
-      pushToast({ variant: 'error', title: 'Insufficient balance', message: `You have ${fmtMoneyWithCode(balance, currency)} available.` });
-      return;
-    }
+    if (!stakeNum || stakeNum <= 0) { pushToast({ variant: 'error', title: 'Enter a stake amount' }); stakeInputRef.current?.focus(); return; }
+    if (!user)      { pushToast({ variant: 'error', title: 'Sign in to place a bet' }); return; }
+    if (balance <= 0) { pushToast({ variant: 'error', title: 'Wallet is empty', message: 'Please deposit funds to continue.' }); return; }
+    if (stakeNum > balance) { pushToast({ variant: 'error', title: 'Insufficient balance', message: `You have ${fmtMoneyWithCode(balance, currency)} available.` }); return; }
     setPlacing(true);
     const res = await placeBet(stakeNum, loadedBookingId ?? undefined);
     setPlacing(false);
-
     if (res?.error) {
       pushToast({ variant: 'error', title: res.error });
     } else {
       pushToast({ variant: 'win', title: 'Bet placed', message: `${fmtMoneyWithCode(stakeNum, currency)} · potential ${fmtMoneyWithCode(potential, currency)}` });
-      setStake('');
-      setLoadedBookingId(null);
+      setStake(''); setLoadedBookingId(null);
       if (isMobile) onClose?.();
     }
   };
@@ -817,50 +585,30 @@ function BetSlipContent({ onClose, isMobile }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-1)' }}>
-
-      {/* ── Header ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '11px 13px', borderBottom: '1px solid var(--border)',
-        background: 'var(--surface-2)', flexShrink: 0,
-      }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 13px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--brand)' }}><Icon.Receipt size={14} /></span>
-          <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-100)', letterSpacing: '0.06em' }}>
-            BET <span style={{ color: 'var(--brand)' }}>SLIP</span>
-          </span>
+          <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-100)', letterSpacing: '0.06em' }}>BET <span style={{ color: 'var(--brand)' }}>SLIP</span></span>
           {slip.length > 0 && (
-            <span style={{
-              background: 'var(--brand)', color: '#fff',
-              borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: 'monospace',
-              padding: '1px 6px',
-            }}>
-              {slip.length}
-            </span>
+            <span style={{ background: 'var(--brand)', color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: 'monospace', padding: '1px 6px' }}>{slip.length}</span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {slip.length > 0 && (
-            <button
-              onClick={() => { clearSlip(); setLoadedBookingId(null); }}
-              title="Clear slip"
-              style={{ color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}
-            >
+            <button onClick={() => { clearSlip(); setLoadedBookingId(null); }} title="Clear slip" style={{ color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}>
               <Icon.Trash size={12} />
             </button>
           )}
           {isMobile && (
-            <button
-              onClick={onClose}
-              style={{ color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}
-            >
+            <button onClick={onClose} style={{ color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}>
               <Icon.Close size={14} />
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Tab Bar ── */}
+      {/* Tab Bar */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface-1)', overflowX: 'auto' }}>
         {TABS.map((t) => {
           const active = tab === t.key;
@@ -869,121 +617,57 @@ function BetSlipContent({ onClose, isMobile }) {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              style={{
-                flex: 1, padding: '9px 2px', position: 'relative',
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                color: active ? (isCode ? '#FFB300' : 'var(--brand)') : 'var(--text-60)',
-                background: active ? 'var(--surface-2)' : 'transparent',
-                border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
+              style={{ flex: 1, padding: '9px 2px', position: 'relative', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? (isCode ? '#FFB300' : 'var(--brand)') : 'var(--text-60)', background: active ? 'var(--surface-2)' : 'transparent', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
-              {isCode
-                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Icon.Code size={10} />{t.label}</span>
-                : t.label
-              }
+              {isCode ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Icon.Code size={10} />{t.label}</span> : t.label}
               {tabCounts[t.key] > 0 && (
-                <span style={{
-                  marginLeft: 4, borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: 'monospace',
-                  padding: '1px 5px', display: 'inline-block',
-                  background: active ? 'var(--brand)' : 'var(--surface-3)',
-                  color: active ? '#fff' : 'var(--text-60)',
-                }}>
+                <span style={{ marginLeft: 4, borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: 'monospace', padding: '1px 5px', display: 'inline-block', background: active ? 'var(--brand)' : 'var(--surface-3)', color: active ? '#fff' : 'var(--text-60)' }}>
                   {tabCounts[t.key]}
                 </span>
               )}
-              {active && (
-                <motion.div
-                  layoutId="slip-tab-line"
-                  style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: isCode ? '#FFB300' : 'var(--brand)' }}
-                />
-              )}
+              {active && <motion.div layoutId="slip-tab-line" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: isCode ? '#FFB300' : 'var(--brand)' }} />}
             </button>
           );
         })}
       </div>
 
-      {/* ── Body ── */}
+      {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '8px 10px' }}>
-
-        {/* SLIP tab */}
         {tab === 'slip' && (
           slip.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 16px', height: '100%' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 22, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, color: 'var(--text-60)' }}>
-                <Icon.Bolt size={20} />
-              </div>
+              <div style={{ width: 44, height: 44, borderRadius: 22, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, color: 'var(--text-60)' }}><Icon.Bolt size={20} /></div>
               <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-100)', marginBottom: 4 }}>Empty slip</div>
               <div style={{ fontSize: 10, color: 'var(--text-60)', lineHeight: 1.5 }}>Tap any odds to add a selection,</div>
-              <button
-                onClick={() => setTab('code')}
-                style={{
-                  marginTop: 10, padding: '6px 12px', borderRadius: 20,
-                  background: 'var(--surface-2)', border: '1px solid var(--border-bright)',
-                  color: '#FFB300', fontSize: 10, fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 5,
-                }}
-              >
-                <Icon.Code size={11} />
-                or load a booking code
+              <button onClick={() => setTab('code')} style={{ marginTop: 10, padding: '6px 12px', borderRadius: 20, background: 'var(--surface-2)', border: '1px solid var(--border-bright)', color: '#FFB300', fontSize: 10, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Icon.Code size={11} />or load a booking code
               </button>
             </div>
           ) : (
             <>
               {loadedBookingId && (
-                <div style={{
-                  marginBottom: 6, padding: '5px 10px', borderRadius: 6,
-                  background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.22)',
-                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: '#FFB300', fontWeight: 700,
-                }}>
-                  <Icon.Code size={10} />
-                  Slip loaded from booking code
+                <div style={{ marginBottom: 6, padding: '5px 10px', borderRadius: 6, background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.22)', display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: '#FFB300', fontWeight: 700 }}>
+                  <Icon.Code size={10} />Slip loaded from booking code
                 </div>
               )}
               <AnimatePresence mode="popLayout">
                 {slip.map((sel) => (
                   <motion.div
                     key={sel.id}
-                    initial={{ opacity: 0, x: 16 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -16, height: 0, marginBottom: 0 }}
+                    initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16, height: 0, marginBottom: 0 }}
                     layout
-                    style={{
-                      position: 'relative',
-                      background: 'var(--surface-2)', border: '1px solid var(--border)',
-                      borderRadius: 8, padding: '10px 30px 10px 10px', marginBottom: 6,
-                    }}
+                    style={{ position: 'relative', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 30px 10px 10px', marginBottom: 6 }}
                   >
-                    <button
-                      onClick={() => removeFromSlip(sel.id)}
-                      style={{
-                        position: 'absolute', top: 8, right: 8,
-                        color: 'var(--text-60)', background: 'none', border: 'none',
-                        cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center',
-                      }}
-                    >
+                    <button onClick={() => removeFromSlip(sel.id)} style={{ position: 'absolute', top: 8, right: 8, color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center' }}>
                       <Icon.Close size={10} />
                     </button>
-                    <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                      {sel.market}
-                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{sel.market}</div>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {/* Use buildMatchLabel — handles match_label, matchLabel, homeTeam+awayTeam */}
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
-                          {buildMatchLabel(sel)}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-60)' }}>
-                          Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span>
-                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-100)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{buildMatchLabel(sel)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-60)' }}>Pick: <span style={{ color: 'var(--text-80)', fontWeight: 600 }}>{sel.selection}</span></div>
                       </div>
-                      <div style={{
-                        fontFamily: 'monospace', fontWeight: 700, fontSize: 11, flexShrink: 0,
-                        padding: '3px 8px', borderRadius: 6,
-                        background: 'var(--surface-3)', border: '1px solid var(--border)',
-                        color: 'var(--brand)',
-                      }}>
-                        {sel.odds.toFixed(2)}
-                      </div>
+                      <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11, flexShrink: 0, padding: '3px 8px', borderRadius: 6, background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--brand)' }}>{sel.odds.toFixed(2)}</div>
                     </div>
                   </motion.div>
                 ))}
@@ -991,88 +675,44 @@ function BetSlipContent({ onClose, isMobile }) {
             </>
           )
         )}
-
-        {/* BOOKING CODE tab */}
-        {tab === 'code' && (
-          <BookingCodeLoader onLoaded={handleBookingLoaded} />
-        )}
-
-        {/* HISTORY TABS */}
+        {tab === 'code' && <BookingCodeLoader onLoaded={handleBookingLoaded} />}
         {tab !== 'slip' && tab !== 'code' && (
           <BetHistoryList
-            bets={
-              tab === 'active' ? bets.filter((b) => b.status === 'PENDING')
-              : tab === 'won'  ? bets.filter((b) => b.status === 'WON')
-              : tab === 'void' ? bets.filter((b) => b.status === 'VOID')
-              : bets.filter((b) => b.status === 'LOST')
-            }
+            bets={tab === 'active' ? bets.filter((b) => b.status === 'PENDING') : tab === 'won' ? bets.filter((b) => b.status === 'WON') : tab === 'void' ? bets.filter((b) => b.status === 'VOID') : bets.filter((b) => b.status === 'LOST')}
             tab={tab}
             onView={setDetailBet}
           />
         )}
       </div>
 
-      {/* ── Footer / Place Bet ── */}
+      {/* Footer / Place Bet */}
       {slip.length > 0 && tab === 'slip' && (
         <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', flexShrink: 0 }}>
           <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            {/* Stake Input */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                 <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-60)' }}>Stake</label>
-                {user && (
-                  <span style={{ fontSize: 9, color: 'var(--text-60)' }}>
-                    Bal: <span style={{ fontFamily: 'monospace', color: 'var(--text-100)', fontWeight: 600 }}>{fmtMoneyWithCode(balance, currency)}</span>
-                  </span>
-                )}
+                {user && <span style={{ fontSize: 9, color: 'var(--text-60)' }}>Bal: <span style={{ fontFamily: 'monospace', color: 'var(--text-100)', fontWeight: 600 }}>{fmtMoneyWithCode(balance, currency)}</span></span>}
               </div>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                background: 'var(--surface-1)', border: '1.5px solid var(--border-bright)', borderRadius: 8, overflow: 'hidden',
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-1)', border: '1.5px solid var(--border-bright)', borderRadius: 8, overflow: 'hidden' }}>
                 <span style={{ padding: '0 8px', fontFamily: 'monospace', fontWeight: 700, fontSize: 11, color: 'var(--text-60)' }}>{currency}</span>
                 <input
                   ref={stakeInputRef}
-                  type="number"
-                  value={stake}
+                  type="number" value={stake}
                   onChange={(e) => setStake(e.target.value)}
                   placeholder="0.00"
-                  style={{
-                    flex: 1, outline: 'none', background: 'transparent', border: 'none',
-                    fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'white',
-                    padding: '8px 0', minWidth: 0,
-                  }}
+                  style={{ flex: 1, outline: 'none', background: 'transparent', border: 'none', fontFamily: 'monospace', fontWeight: 700, fontSize: 14, color: 'white', padding: '8px 0', minWidth: 0 }}
                 />
-                {stake && (
-                  <button onClick={() => setStake('')} style={{ padding: '0 8px', fontSize: 10, color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-                    clear
-                  </button>
-                )}
+                {stake && <button onClick={() => setStake('')} style={{ padding: '0 8px', fontSize: 10, color: 'var(--text-60)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>clear</button>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4, marginTop: 5 }}>
                 {QUICK.map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setStake(String((parseFloat(stake) || 0) + n))}
-                    style={{
-                      padding: '5px 2px', fontFamily: 'monospace', fontWeight: 600, fontSize: 9,
-                      background: 'var(--surface-1)', border: '1px solid var(--border-bright)',
-                      color: 'var(--text-80)', borderRadius: 6, cursor: 'pointer',
-                    }}
-                  >
-                    +{n}
-                  </button>
+                  <button key={n} onClick={() => setStake(String((parseFloat(stake) || 0) + n))} style={{ padding: '5px 2px', fontFamily: 'monospace', fontWeight: 600, fontSize: 9, background: 'var(--surface-1)', border: '1px solid var(--border-bright)', color: 'var(--text-80)', borderRadius: 6, cursor: 'pointer' }}>+{n}</button>
                 ))}
               </div>
             </div>
-
-            {/* Summary */}
             <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 9, display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {[
-                { label: 'Total Odds', value: `${totalOdds.toFixed(2)}×` },
-                { label: 'Stake',      value: fmtMoneyWithCode(stakeNum || 0, currency) },
-              ].map((row) => (
+              {[{ label: 'Total Odds', value: `${totalOdds.toFixed(2)}×` }, { label: 'Stake', value: fmtMoneyWithCode(stakeNum || 0, currency) }].map((row) => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
                   <span style={{ color: 'var(--text-60)' }}>{row.label}</span>
                   <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-100)' }}>{row.value}</span>
@@ -1083,26 +723,16 @@ function BetSlipContent({ onClose, isMobile }) {
                 <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--win)' }}>{fmtMoneyWithCode(potential || 0, currency)}</span>
               </div>
             </div>
-
-            {/* Place Bet Button */}
             <button
               onClick={handlePlace}
               disabled={placing || !stakeNum || stakeNum <= 0}
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 8,
-                background: 'var(--grad-primary)', color: '#fff',
-                fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
-                border: 'none', cursor: placing ? 'not-allowed' : 'pointer',
-                opacity: placing ? 0.6 : 1, transition: 'opacity 0.15s',
-              }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: 'var(--grad-primary)', color: '#fff', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em', border: 'none', cursor: placing ? 'not-allowed' : 'pointer', opacity: placing ? 0.6 : 1, transition: 'opacity 0.15s' }}
             >
               {placing ? 'Placing…' : `Place Bet · ${fmtMoneyWithCode(stakeNum || 0, currency)}`}
             </button>
           </div>
         </div>
       )}
-
-      {/* Detail Modal */}
       <AnimatePresence>
         {detailBet && <BetDetailModal bet={detailBet} onClose={() => setDetailBet(null)} />}
       </AnimatePresence>
@@ -1163,21 +793,14 @@ export function BetSlipDrawer() {
           <>
             <motion.div
               key="bs-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={closeSlip}
-              style={{
-                position: 'fixed', inset: 0,
-                background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', zIndex: 49,
-              }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', zIndex: 49 }}
               className="lg:hidden"
             />
             <motion.aside
               key="bs-drawer"
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 34 }}
               className="bs-drawer"
             >
@@ -1191,6 +814,9 @@ export function BetSlipDrawer() {
 }
 
 // ─── Mobile Floating Button ───────────────────────────────────────────────────
+// FIX: was z-index 30 (behind BottomNav which is z-40) and bottom: 80px which
+// caused it to get cut off. Now z-index 45 (above nav, below drawer) and
+// bottom: 72px (clears the ~56px BottomNav with comfortable margin).
 
 export function BetSlipFloatingBtn() {
   const slip       = useStore((s) => s.slip);
@@ -1207,17 +833,27 @@ export function BetSlipFloatingBtn() {
           exit={{ scale: 0, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 24 }}
           onClick={toggleSlip}
+          className="lg:hidden"
           style={{
-            position: 'fixed', bottom: 80, right: 16, zIndex: 30,
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '12px', borderRadius: 999,
-            background: 'var(--grad-primary)', color: '#fff',
-            fontWeight: 600, border: 'none', cursor: 'pointer',
-            boxShadow: '0 6px 28px rgba(124,58,237,0.48)',
+            position: 'fixed',
+            bottom: 72,        /* clears BottomNav (~56px) + 16px breathing room */
+            right: 16,
+            zIndex: 45,        /* above BottomNav (z-40), below drawer (z-50) */
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 16px',
+            borderRadius: 999,
+            background: 'var(--grad-primary)',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 13,
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 6px 24px rgba(220,38,38,0.45)',
             touchAction: 'manipulation',
             WebkitTapHighlightColor: 'transparent',
           }}
-          className="lg:hidden"
         >
           <div style={{ position: 'relative' }}>
             <Icon.Receipt size={18} />
@@ -1238,6 +874,9 @@ export function BetSlipFloatingBtn() {
               </motion.span>
             )}
           </div>
+          {slip.length > 0 && (
+            <span style={{ fontSize: 12 }}>Slip ({slip.length})</span>
+          )}
         </motion.button>
       )}
     </AnimatePresence>

@@ -4,8 +4,7 @@ import { TopBar, BottomNav, MobileDrawer } from '../Navigation';
 import { BetSlipSidebar, BetSlipDrawer, BetSlipFloatingBtn } from '../BetSlip';
 import { ToastHost } from '../Shared';
 
-// Pages where the bet slip is "in-flow" (i.e. mobile shows the floating button by default).
-// On all other public pages, mobile users get the bubble icon to peek the slip.
+// Pages where the bet slip is relevant
 const BETTING_PATHS = [
   '/app/sports',
   '/app/live',
@@ -20,63 +19,73 @@ export default function Layout({ children }) {
   const location = useLocation();
   const path = location.pathname;
 
-  // Pages that get NO chrome at all (bare layouts)
+  // Pages that get NO chrome at all
   const hideChrome =
     path.startsWith('/auth') ||
     path.startsWith('/x-control-9f3a2b');
 
-  // Pages where bet slip should NOT appear at all (admin uses its own shell, no slip)
+  // Admin uses its own shell — no bet slip
   const hideBetSlip =
     path.startsWith('/admin') ||
     hideChrome;
 
   if (hideChrome) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: 'var(--surface-1)' }}>
+      <div
+        className="min-h-screen flex flex-col"
+        style={{ background: 'var(--surface-1)', overflowX: 'hidden' }}
+      >
         {children}
         <ToastHost />
       </div>
     );
   }
 
-  // Bet slip rendering rules:
-  //   • Desktop sidebar    → ALWAYS visible (on every public page)
-  //   • Mobile drawer      → present everywhere (toggleable)
-  //   • Floating bubble    → ONLY on non-betting pages (mobile)
-  //                          On betting pages, slip lives in the natural flow
-  const showFloatingBubble = !BETTING_PATHS.some((p) => path.startsWith(p));
-
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--surface-1)' }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: 'var(--surface-1)', overflowX: 'hidden' }}
+    >
       <TopBar onOpenMenu={() => setMenuOpen(true)} />
 
       {/*
-        ── LAYOUT FIX ──────────────────────────────────────────────────────────
-        The right padding must exactly match the sidebar widths defined in
-        BetSlip.jsx, which are:
+        ── PADDING FIX ───────────────────────────────────────────────────────
+        Right padding must EXACTLY match BetSlipSidebar widths:
           lg  (≥1024px) → 268px
           xl  (≥1280px) → 288px
           2xl (≥1536px) → 308px
-
-        The old values (lg:pr-[340px] xl:pr-[380px]) were ~70px wider than the
-        actual sidebar, leaving a visible gap between the main content and the
-        slip panel. Now they match 1-to-1, closing the gap completely.
-        ────────────────────────────────────────────────────────────────────────
+        Old values (340px / 380px) were ~70px wider → caused the gap.
+        On mobile there is zero right padding; the slip is a drawer.
+        ─────────────────────────────────────────────────────────────────────
       */}
-      <div className={`flex-1 flex ${!hideBetSlip ? 'lg:pr-[268px] xl:pr-[288px] 2xl:pr-[308px]' : ''}`}>
-        <main className="flex-1 pb-20 lg:pb-8 min-w-0">{children}</main>
+      <div
+        className={`flex-1 flex min-w-0 ${
+          !hideBetSlip ? 'lg:pr-[268px] xl:pr-[288px] 2xl:pr-[308px]' : ''
+        }`}
+      >
+        <main
+          className="flex-1 w-full min-w-0 pb-24 lg:pb-8"
+          style={{ overflowX: 'hidden' }}
+        >
+          {children}
+        </main>
       </div>
 
       {!hideBetSlip && (
         <>
-          {/* Desktop sidebar — always visible at lg+ */}
+          {/* Desktop: fixed sidebar, always visible lg+ */}
           <BetSlipSidebar />
-          {/* Mobile drawer — backed by toggleSlip state */}
+          {/* Mobile: slide-in drawer from right */}
           <BetSlipDrawer />
-          {/* Floating bubble — mobile only, non-betting pages only */}
-          {showFloatingBubble && <BetSlipFloatingBtn />}
+          {/*
+            Floating button — mobile only (hidden at lg+).
+            Always rendered so users can open slip on any page.
+            Positioned above BottomNav with safe clearance.
+          */}
+          <BetSlipFloatingBtn />
         </>
       )}
+
       <BottomNav />
       <MobileDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
       <ToastHost />
