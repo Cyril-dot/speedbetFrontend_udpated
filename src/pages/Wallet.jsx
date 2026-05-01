@@ -90,6 +90,9 @@ export default function Wallet() {
   const symbol          = CURRENCY_SYMBOL[currency]   ?? '₵';
 
   // ── Deposit: initialise Paystack and redirect ──
+  // FIX: api.ts req() already unwraps json.data, so authorization_url lands
+  // directly on res (or res.data if the store wraps it once more).
+  // Check all nesting levels; never show a false-positive "follow instructions" toast.
   const submitDeposit = async () => {
     const a = +amount;
     if (!a || a < minDeposit) {
@@ -100,11 +103,20 @@ export default function Wallet() {
     try {
       const res = await useStore.getState().deposit({ amount: a, currency });
       if (res?.error) throw new Error(res.error);
-      if (res?.data?.authorizationUrl || res?.data?.authorization_url) {
-        window.location.href = res.data.authorizationUrl ?? res.data.authorization_url;
+
+      const url =
+        res?.authorization_url       ??
+        res?.authorizationUrl        ??
+        res?.data?.authorization_url ??
+        res?.data?.authorizationUrl;
+
+      if (url) {
+        window.location.href = url;
       } else {
-        pushToast({ variant: 'win', title: 'Deposit initiated', message: 'Follow the payment instructions.' });
+        console.warn('[deposit] No redirect URL found. Full response:', JSON.stringify(res, null, 2));
+        pushToast({ variant: 'error', title: 'Deposit failed', message: 'Could not get payment link. Please try again.' });
       }
+
       setShowDeposit(false);
       setAmount('');
     } catch (e) {
