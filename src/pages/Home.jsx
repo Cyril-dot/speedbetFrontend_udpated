@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { matches as matchesApi } from '../api';
-import { MatchCard } from '../components/Shared';
+import { MatchCard, MatchGroup } from '../components/Shared';
 import {
   scrollFadeIn,
   scrollScaleIn,
@@ -94,21 +94,10 @@ export function isCupOrChampionship(leagueName = '') {
   return CUP_CHAMPIONSHIP_KEYWORDS.some((kw) => l.includes(kw));
 }
 
-// ─── Enrich a single team object with hardcoded logo if API logo is missing ──
-function enrichTeam(teamObj) {
-  if (!teamObj) return teamObj;
-  if (teamObj.logo) return teamObj; // API already provided a logo — keep it
-  const hardcoded = resolveHardcodedLogo(teamObj.name);
-  if (hardcoded) return { ...teamObj, logo: hardcoded };
-  return teamObj;
-}
-
-// ─── Adapt raw API match to normalised shape, then enrich logos ───────────────
+// ─── Adapt raw API match to normalised shape ───────────────────────────────────
 function adaptMatch(m) {
   const homeName = resolveTeamName(m, 'home');
   const awayName = resolveTeamName(m, 'away');
-  const homeLogo = resolveTeamLogo(m, 'home');
-  const awayLogo = resolveTeamLogo(m, 'away');
 
   const league =
     m.league ??
@@ -134,23 +123,22 @@ function adaptMatch(m) {
     name:  homeName,
     short: (m.home?.short ?? homeName.slice(0, 3)).toUpperCase(),
     color: m.home?.color ?? '#888',
-    logo:  homeLogo,
+    logo:  null, // logos removed
   };
 
   const rawAway = {
     name:  awayName,
     short: (m.away?.short ?? awayName.slice(0, 3)).toUpperCase(),
     color: m.away?.color ?? '#888',
-    logo:  awayLogo,
+    logo:  null, // logos removed
   };
 
   return {
     id:      m.id ?? m.externalId ?? `match-${Math.random().toString(36).slice(2)}`,
     status:  m.status ?? 'SCHEDULED',
     league,
-    // ── Enrich logos from hardcoded map when API logo is absent ──────────────
-    home:    enrichTeam(rawHome),
-    away:    enrichTeam(rawAway),
+    home:    rawHome,
+    away:    rawAway,
     score:   { home: scoreHome, away: scoreAway },
     minute,
     kickoff,
@@ -158,58 +146,94 @@ function adaptMatch(m) {
   };
 }
 
-// ─── Check if a match has at least one top-6 team (uses adapted shape) ────────
+// ─── Check if a match has at least one top-6 team ────────────────────────────
 function matchIsTop6(m) {
   return isTop6LeagueMatch(m.home?.name ?? '', m.away?.name ?? '');
 }
 
-// ─── Fallback carousel slides built purely from hardcoded data ────────────────
-// Picks one high-profile fixture per league so the carousel is never empty.
+// ─── Fallback carousel slides ─────────────────────────────────────────────────
 export function getFallbackCarouselMatches() {
   return [
     {
       id: 'fallback-1', status: 'UPCOMING', league: 'Premier League',
-      home: { name: 'Arsenal',   logo: resolveHardcodedLogo('Arsenal'),   short: 'ARS', color: '#EF0107' },
-      away: { name: 'Liverpool', logo: resolveHardcodedLogo('Liverpool'),  short: 'LIV', color: '#C8102E' },
+      home: { name: 'Arsenal',   logo: null, short: 'ARS', color: '#EF0107' },
+      away: { name: 'Liverpool', logo: null, short: 'LIV', color: '#C8102E' },
       score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
     },
     {
       id: 'fallback-2', status: 'UPCOMING', league: 'La Liga',
-      home: { name: 'Real Madrid', logo: resolveHardcodedLogo('Real Madrid'), short: 'RMA', color: '#FEBE10' },
-      away: { name: 'Barcelona',   logo: resolveHardcodedLogo('Barcelona'),   short: 'BAR', color: '#A50044' },
+      home: { name: 'Real Madrid', logo: null, short: 'RMA', color: '#FEBE10' },
+      away: { name: 'Barcelona',   logo: null, short: 'BAR', color: '#A50044' },
       score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
     },
     {
       id: 'fallback-3', status: 'UPCOMING', league: 'Bundesliga',
-      home: { name: 'Bayern Munich',      logo: resolveHardcodedLogo('Bayern Munich'),      short: 'BAY', color: '#DC052D' },
-      away: { name: 'Borussia Dortmund',  logo: resolveHardcodedLogo('Borussia Dortmund'),  short: 'BVB', color: '#FDE100' },
+      home: { name: 'Bayern Munich',      logo: null, short: 'BAY', color: '#DC052D' },
+      away: { name: 'Borussia Dortmund',  logo: null, short: 'BVB', color: '#FDE100' },
       score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
     },
     {
       id: 'fallback-4', status: 'UPCOMING', league: 'Serie A',
-      home: { name: 'Inter Milan', logo: resolveHardcodedLogo('Inter Milan'), short: 'INT', color: '#0068A8' },
-      away: { name: 'Juventus',    logo: resolveHardcodedLogo('Juventus'),    short: 'JUV', color: '#000000' },
+      home: { name: 'Inter Milan', logo: null, short: 'INT', color: '#0068A8' },
+      away: { name: 'Juventus',    logo: null, short: 'JUV', color: '#000000' },
       score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
     },
     {
       id: 'fallback-5', status: 'UPCOMING', league: 'Ligue 1',
-      home: { name: 'Paris Saint-Germain', logo: resolveHardcodedLogo('PSG'),       short: 'PSG', color: '#004170' },
-      away: { name: 'Marseille',           logo: resolveHardcodedLogo('Marseille'),  short: 'OM',  color: '#2faee0' },
+      home: { name: 'Paris Saint-Germain', logo: null, short: 'PSG', color: '#004170' },
+      away: { name: 'Marseille',           logo: null, short: 'OM',  color: '#2faee0' },
       score: { home: null, away: null }, minute: null, kickoff: null, odds: null,
     },
   ];
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-function MatchSkeleton() {
+// ─── Row skeleton ─────────────────────────────────────────────────────────────
+function MatchRowSkeleton() {
   return (
-    <div className="rounded-xl p-4 animate-pulse" style={{ background: 'var(--surface-0)', border: '1px solid var(--border)', minHeight: 110 }}>
-      <div className="h-3 w-24 rounded mb-3" style={{ background: 'var(--surface-2)' }} />
-      <div className="flex justify-between items-center gap-4">
-        <div className="h-4 w-28 rounded" style={{ background: 'var(--surface-2)' }} />
-        <div className="h-6 w-12 rounded" style={{ background: 'var(--surface-2)' }} />
-        <div className="h-4 w-28 rounded" style={{ background: 'var(--surface-2)' }} />
+    <div
+      className="animate-pulse"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '9px 10px',
+        background: 'var(--surface-0)',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      <div style={{ width: 46, height: 32, borderRadius: 4, background: 'var(--surface-2)', flexShrink: 0 }} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ height: 12, width: '60%', borderRadius: 3, background: 'var(--surface-2)' }} />
+        <div style={{ height: 12, width: '50%', borderRadius: 3, background: 'var(--surface-2)' }} />
       </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width: 44, height: 32, borderRadius: 5, background: 'var(--surface-2)' }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Group matches by league ──────────────────────────────────────────────────
+function groupByLeague(matches) {
+  const map = {};
+  for (const m of matches) {
+    const key = m.league || 'Other';
+    if (!map[key]) map[key] = [];
+    map[key].push(m);
+  }
+  return Object.entries(map);
+}
+
+// ─── Sportsbook list container ────────────────────────────────────────────────
+function MatchListContainer({ children }) {
+  return (
+    <div style={{
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 8,
+      overflow: 'hidden',
+      background: 'var(--surface-0)',
+    }}>
+      {children}
     </div>
   );
 }
@@ -257,19 +281,17 @@ export default function Home() {
         const adaptedLive = adaptWithOdds(withOddsData?.live)
           .filter((m) => !isDemoMatch(m));
 
-        // Sort upcoming: top-6 teams first → then any with logos → then rest
         const allUpcoming = adaptWithOdds(withOddsData?.upcoming)
           .filter((m) => !isDemoMatch(m));
 
-        const upTop6       = allUpcoming.filter((m) =>  matchIsTop6(m));
-        const upWithLogos  = allUpcoming.filter((m) => !matchIsTop6(m) && m.home?.logo && m.away?.logo);
-        const upRest       = allUpcoming.filter((m) => !matchIsTop6(m) && (!m.home?.logo || !m.away?.logo));
-        const adaptedUpcoming = [...upTop6, ...upWithLogos, ...upRest].slice(0, 6);
+        const upTop6      = allUpcoming.filter((m) =>  matchIsTop6(m));
+        const upWithLogos = allUpcoming.filter((m) => !matchIsTop6(m));
+        const adaptedUpcoming = [...upTop6, ...upWithLogos].slice(0, 12);
 
         const adaptedEnded = (results ?? [])
           .map((m) => adaptMatch(m))
           .filter((m) => !isDemoMatch(m))
-          .slice(0, 4);
+          .slice(0, 6);
 
         setLiveMatches(adaptedLive);
         setUpcomingMatches(adaptedUpcoming);
@@ -284,7 +306,6 @@ export default function Home() {
 
     load();
 
-    // Refresh live matches every 30 s
     const iv = setInterval(async () => {
       try {
         const data = await matchesApi.withOdds();
@@ -312,23 +333,41 @@ export default function Home() {
     };
   }, []);
 
-  // GSAP animations after load
   useEffect(() => {
     if (!loading) {
-      if (quickNavRef.current)      staggerFadeIn(quickNavRef.current.children);
-      if (liveSectionRef.current)   scrollFadeIn(liveSectionRef.current);
+      if (quickNavRef.current)        staggerFadeIn(quickNavRef.current.children);
+      if (liveSectionRef.current)     scrollFadeIn(liveSectionRef.current);
       if (upcomingSectionRef.current) scrollFadeIn(upcomingSectionRef.current);
-      if (gamesSectionRef.current)  scrollScaleIn(gamesSectionRef.current);
+      if (gamesSectionRef.current)    scrollScaleIn(gamesSectionRef.current);
     }
   }, [loading]);
 
-  // ── Carousel: prefer top-6 / cup matches from API; fall back to hardcoded ──
   const apiCarouselMatches = allMatches.filter(
     (m) => isCupOrChampionship(m.league) || matchIsTop6(m)
   );
   const carouselMatches = apiCarouselMatches.length > 0
     ? apiCarouselMatches
     : getFallbackCarouselMatches();
+
+  // Column header row for sportsbook style
+  const OddsHeader = () => (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      padding: '5px 10px',
+      background: 'rgba(255,255,255,0.03)',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+    }}>
+      <div style={{ flex: 1 }} />
+      <div style={{ display: 'flex', gap: 4, paddingRight: 36 }}>
+        {['1', 'X', '2'].map(h => (
+          <span key={h} style={{
+            width: 44, textAlign: 'center',
+            fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.4)',
+          }}>{h}</span>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="w-full overflow-x-hidden" style={{ background: 'var(--surface-1)' }}>
@@ -368,8 +407,8 @@ export default function Home() {
       </section>
 
       {/* ═══ LIVE MATCHES ═══ */}
-      <section ref={liveSectionRef} className="max-w-7xl mx-auto px-4 md:px-8 py-10">
-        <div className="flex items-end justify-between mb-5 flex-wrap gap-3">
+      <section ref={liveSectionRef} className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+        <div className="flex items-end justify-between mb-4 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="live-dot" />
@@ -383,17 +422,17 @@ export default function Home() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[0, 1, 2].map((i) => <MatchSkeleton key={i} />)}
-          </div>
+          <MatchListContainer>
+            <OddsHeader />
+            {[0, 1, 2].map((i) => <MatchRowSkeleton key={i} />)}
+          </MatchListContainer>
         ) : liveMatches.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {liveMatches.map((m, i) => (
-              <motion.div key={m.id ?? i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <MatchCard match={m} />
-              </motion.div>
+          <MatchListContainer>
+            <OddsHeader />
+            {groupByLeague(liveMatches).map(([league, matches]) => (
+              <MatchGroup key={league} label={league} matches={matches} />
             ))}
-          </div>
+          </MatchListContainer>
         ) : (
           <div className="text-center py-10 rounded-xl" style={{ background: 'var(--surface-0)', border: '1px solid var(--border)' }}>
             <div className="text-3xl mb-2">⚽</div>
@@ -403,8 +442,8 @@ export default function Home() {
       </section>
 
       {/* ═══ UPCOMING MATCHES ═══ */}
-      <section ref={upcomingSectionRef} className="max-w-7xl mx-auto px-4 md:px-8 py-10 border-t" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-end justify-between mb-5 flex-wrap gap-3">
+      <section ref={upcomingSectionRef} className="max-w-7xl mx-auto px-4 md:px-8 py-8 border-t" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-end justify-between mb-4 flex-wrap gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-widest font-bold mb-1" style={{ color: 'var(--brand)' }}>Up next</div>
             <h2 className="text-2xl md:text-3xl">Upcoming</h2>
@@ -415,17 +454,17 @@ export default function Home() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[0, 1, 2, 3, 4, 5].map((i) => <MatchSkeleton key={i} />)}
-          </div>
+          <MatchListContainer>
+            <OddsHeader />
+            {[0, 1, 2, 3, 4, 5].map((i) => <MatchRowSkeleton key={i} />)}
+          </MatchListContainer>
         ) : upcomingMatches.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {upcomingMatches.map((m, i) => (
-              <motion.div key={m.id ?? i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                <MatchCard match={m} />
-              </motion.div>
+          <MatchListContainer>
+            <OddsHeader />
+            {groupByLeague(upcomingMatches).map(([league, matches]) => (
+              <MatchGroup key={league} label={league} matches={matches} />
             ))}
-          </div>
+          </MatchListContainer>
         ) : (
           <div className="text-center py-10 rounded-xl" style={{ background: 'var(--surface-0)', border: '1px solid var(--border)' }}>
             <p className="text-sm" style={{ color: 'var(--text-60)' }}>No upcoming matches scheduled yet.</p>
@@ -539,18 +578,16 @@ export default function Home() {
 
       {/* ═══ RECENT RESULTS ═══ */}
       {!loading && endedMatches.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 md:px-8 py-10 border-t" style={{ borderColor: 'var(--border)' }}>
-          <div className="mb-5">
+        <section className="max-w-7xl mx-auto px-4 md:px-8 py-8 border-t" style={{ borderColor: 'var(--border)' }}>
+          <div className="mb-4">
             <div className="text-[11px] uppercase tracking-widest font-bold mb-1" style={{ color: 'var(--brand)' }}>Just finished</div>
             <h2 className="text-2xl md:text-3xl">Recent Results</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {endedMatches.map((m, i) => (
-              <motion.div key={m.id ?? i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                <MatchCard match={m} />
-              </motion.div>
+          <MatchListContainer>
+            {groupByLeague(endedMatches).map(([league, matches]) => (
+              <MatchGroup key={league} label={league} matches={matches} />
             ))}
-          </div>
+          </MatchListContainer>
         </section>
       )}
 
