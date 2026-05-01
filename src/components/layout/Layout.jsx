@@ -50,7 +50,20 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--surface-1)' }}>
       <TopBar onOpenMenu={() => setMenuOpen(true)} />
 
-      <div className={`flex-1 flex ${!hideBetSlip ? 'lg:pr-[340px] xl:pr-[380px]' : ''}`}>
+      {/*
+        ── LAYOUT FIX ──────────────────────────────────────────────────────────
+        The right padding must exactly match the sidebar widths defined in
+        BetSlip.jsx, which are:
+          lg  (≥1024px) → 268px
+          xl  (≥1280px) → 288px
+          2xl (≥1536px) → 308px
+
+        The old values (lg:pr-[340px] xl:pr-[380px]) were ~70px wider than the
+        actual sidebar, leaving a visible gap between the main content and the
+        slip panel. Now they match 1-to-1, closing the gap completely.
+        ────────────────────────────────────────────────────────────────────────
+      */}
+      <div className={`flex-1 flex ${!hideBetSlip ? 'lg:pr-[268px] xl:pr-[288px] 2xl:pr-[308px]' : ''}`}>
         <main className="flex-1 pb-20 lg:pb-8 min-w-0">{children}</main>
       </div>
 
