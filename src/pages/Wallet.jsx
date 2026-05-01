@@ -104,11 +104,14 @@ export default function Wallet() {
       const res = await useStore.getState().deposit({ amount: a, currency });
       if (res?.error) throw new Error(res.error);
 
+      // Confirmed shape: { ok, data: { status, message, data: { authorization_url } } }
       const url =
-        res?.authorization_url       ??
-        res?.authorizationUrl        ??
-        res?.data?.authorization_url ??
-        res?.data?.authorizationUrl;
+        res?.data?.data?.authorization_url ??
+        res?.data?.data?.authorizationUrl  ??
+        res?.data?.authorization_url       ??
+        res?.data?.authorizationUrl        ??
+        res?.authorization_url             ??
+        res?.authorizationUrl;
 
       if (url) {
         window.location.href = url;
