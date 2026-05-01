@@ -6,6 +6,8 @@ import { ShareIcon, PlusIcon, CheckIcon } from '../../components/icons';
 import { useStore } from '../../store';
 import AdminShell from './AdminShell';
 
+const BASE_URL = import.meta.env.VITE_APP_URL || 'https://www.speedbet.site';
+
 export default function ReferralLinks() {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ export default function ReferralLinks() {
   };
 
   const copyLink = (link) => {
-    const url = `https://speedbet.app/auth/register?ref=${link.code}`;
+    const url = `${BASE_URL}/auth/register?ref=${link.code}`;
     navigator.clipboard?.writeText?.(url);
     setCopiedId(link.id);
     pushToast({ variant: 'win', title: 'Copied', message: url });
@@ -114,7 +116,7 @@ export default function ReferralLinks() {
                     </span>
                   </div>
                   <div className="bg-black-800 border border-black-700 px-3 py-2 mb-3 text-xs font-mono text-electric-400 truncate">
-                    speedbet.app/auth/register?ref={l.code}
+                    speedbet.site/auth/register?ref={l.code}
                   </div>
                   <div className="flex gap-2">
                     <Button
