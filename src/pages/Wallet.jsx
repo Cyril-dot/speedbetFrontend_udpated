@@ -43,11 +43,30 @@ export default function Wallet() {
   const [accountNumber,  setAccountNumber]  = useState('');
   const [accountName,    setAccountName]    = useState('');
 
-  // ── Fetch wallet + transactions on mount (and whenever user changes) ──
+  // ── Fetch wallet on mount ──
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     fetchWallet().finally(() => setLoading(false));
+  }, [user]);
+
+  // ── Poll after returning from Paystack ──
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      pushToast({ variant: 'info', title: 'Payment received', message: 'Confirming your deposit...' });
+      // Poll at 2s and 5s to catch the webhook credit
+      const t1 = setTimeout(() => fetchWallet(), 2000);
+      const t2 = setTimeout(() => {
+        fetchWallet().then(() => {
+          pushToast({ variant: 'win', title: 'Wallet updated', message: 'Your deposit has been credited.' });
+        });
+      }, 5000);
+      // Clean the query param from the URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
   }, [user]);
 
   const rawTransactions = wallet?.transactions ?? [];
@@ -93,7 +112,7 @@ export default function Wallet() {
     }
   };
 
-  // ── Withdraw: call store.withdraw which calls API ──
+  // ── Withdraw ──
   const submitWithdraw = async () => {
     const a = +withdrawAmount;
     if (!a || a < 10) {
@@ -109,13 +128,7 @@ export default function Wallet() {
       return;
     }
 
-    const result = await withdraw({
-      amount:        a,
-      currency,
-      bankName,
-      accountNumber,
-      accountName,
-    });
+    const result = await withdraw({ amount: a, currency, bankName, accountNumber, accountName });
 
     if (result?.error) {
       pushToast({ variant: 'error', title: 'Withdrawal failed', message: result.error });
@@ -132,7 +145,6 @@ export default function Wallet() {
     setBankName('');
     setAccountNumber('');
     setAccountName('');
-
     fetchWallet();
   };
 
@@ -266,19 +278,15 @@ export default function Wallet() {
       {/* ── Deposit Modal ── */}
       <Modal open={showDeposit} onClose={() => { setShowDeposit(false); setAmount(''); }} title="DEPOSIT FUNDS">
         <div className="flex flex-col gap-4 w-full">
-
-          {/* Auto-detected currency badge */}
           <div className="flex items-center justify-between bg-black-800 border border-black-700 rounded px-4 py-3">
             <span className="text-white-60 text-xs">Depositing in</span>
             <span className="font-mono font-bold text-white-100">{currency}</span>
           </div>
-
           <div>
             <p className="text-white-60 text-xs">
               Min deposit: <span className="text-white-100 font-semibold">{minDepositLabel}</span>
             </p>
           </div>
-
           <Input
             label={`Amount (${currency})`}
             type="number"
@@ -286,8 +294,6 @@ export default function Wallet() {
             onChange={(e) => setAmount(e.target.value)}
             placeholder={String(minDeposit)}
           />
-
-          {/* Quick-pick */}
           <div className="grid grid-cols-4 gap-1">
             {quickAmounts.map((n) => (
               <button
@@ -299,7 +305,6 @@ export default function Wallet() {
               </button>
             ))}
           </div>
-
           <Button variant="primary" size="lg" className="w-full" onClick={submitDeposit}>
             DEPOSIT {amount ? fmtMoneyWithCode(+amount, currency) : minDepositLabel}
           </Button>
@@ -309,22 +314,16 @@ export default function Wallet() {
       {/* ── Withdraw Modal ── */}
       <Modal open={showWithdraw} onClose={() => { setShowWithdraw(false); setWithdrawAmount(''); }} title="WITHDRAW FUNDS">
         <div className="flex flex-col gap-4 w-full">
-
-          {/* Available balance */}
           <div className="flex items-center justify-between bg-black-800 border border-black-700 rounded px-4 py-3">
             <span className="text-white-60 text-xs">Available</span>
             <span className="font-mono text-lg sm:text-2xl text-white-100 tabular-nums">
               {fmtMoneyWithCode(balance, currency)}
             </span>
           </div>
-
-          {/* Auto-detected currency — read only */}
           <div className="flex items-center justify-between bg-black-800 border border-black-700 rounded px-4 py-3">
             <span className="text-white-60 text-xs">Withdrawing in</span>
             <span className="font-mono font-bold text-white-100">{currency}</span>
           </div>
-
-          {/* Amount */}
           <Input
             label={`Amount (${currency})`}
             type="number"
@@ -332,8 +331,6 @@ export default function Wallet() {
             onChange={(e) => setWithdrawAmount(e.target.value)}
             placeholder="Enter amount"
           />
-
-          {/* Bank details */}
           <div className="border-t border-black-700 pt-4 space-y-3">
             <div className="text-[10px] caps text-white-60">BANK ACCOUNT DETAILS</div>
             <Input
@@ -358,11 +355,9 @@ export default function Wallet() {
               />
             </div>
           </div>
-
           <p className="text-white-60 text-xs">
             Min withdrawal: {symbol}10 · Processing time: up to 24 hours.
           </p>
-
           <Button variant="primary" size="lg" className="w-full" onClick={submitWithdraw}>
             WITHDRAW {withdrawAmount ? fmtMoneyWithCode(+withdrawAmount, currency) : '—'}
           </Button>
