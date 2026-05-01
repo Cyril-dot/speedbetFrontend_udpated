@@ -65,36 +65,77 @@ export const SportyJetArt = () => (
   </svg>
 );
 
-export const SportyKickArt = () => (
+export const BallCrushArt = () => (
   <svg viewBox="0 0 200 120" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
     <defs>
-      <linearGradient id="sk-grass" x1="0" y1="0" x2="0" y2="120">
-        <stop offset="0" stopColor="#15803D" />
-        <stop offset="1" stopColor="#052E16" />
+      <linearGradient id="bc-bg" x1="0" y1="0" x2="0" y2="120">
+        <stop offset="0" stopColor="#1A0A2E" />
+        <stop offset="1" stopColor="#0D0015" />
+      </linearGradient>
+      <radialGradient id="bc-glow" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stopColor="#E8003D" stopOpacity="0.5" />
+        <stop offset="1" stopColor="#E8003D" stopOpacity="0" />
+      </radialGradient>
+      <linearGradient id="bc-ball" x1="0.3" y1="0.1" x2="0.8" y2="0.9">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="0.4" stopColor="#e0e0e0" />
+        <stop offset="1" stopColor="#888888" />
       </linearGradient>
     </defs>
-    <rect width="200" height="120" fill="url(#sk-grass)" />
-    {/* Field stripes */}
-    {[0,40,80,120,160].map((x,i) => (
-      <rect key={i} x={x} y="0" width="20" height="120" fill="rgba(255,255,255,0.04)" />
-    ))}
-    {/* Field lines */}
-    <g stroke="#fff" strokeWidth="1" fill="none" opacity="0.45">
-      <rect x="10" y="20" width="180" height="80" />
-      <line x1="100" y1="20" x2="100" y2="100" />
-      <circle cx="100" cy="60" r="18" />
-      <rect x="10" y="40" width="30" height="40" />
-      <rect x="160" y="40" width="30" height="40" />
+    <rect width="200" height="120" fill="url(#bc-bg)" />
+
+    {/* Impact glow behind ball */}
+    <ellipse cx="105" cy="65" rx="38" ry="38" fill="url(#bc-glow)" />
+
+    {/* Shatter/crack lines radiating from impact */}
+    <g stroke="#E8003D" strokeWidth="1" opacity="0.85" fill="none" strokeLinecap="round">
+      <line x1="105" y1="65" x2="148" y2="32" />
+      <line x1="105" y1="65" x2="160" y2="58" />
+      <line x1="105" y1="65" x2="155" y2="90" />
+      <line x1="105" y1="65" x2="130" y2="108" />
+      <line x1="105" y1="65" x2="75"  y2="105" />
+      <line x1="105" y1="65" x2="58"  y2="88" />
+      <line x1="105" y1="65" x2="55"  y2="50" />
+      <line x1="105" y1="65" x2="72"  y2="28" />
     </g>
-    {/* Goal post */}
-    <g stroke="#fff" strokeWidth="1.5" fill="none">
-      <rect x="170" y="48" width="14" height="24" />
+
+    {/* Secondary crack fragments */}
+    <g stroke="#FF4060" strokeWidth="0.6" opacity="0.5" fill="none" strokeLinecap="round">
+      <line x1="140" y1="40" x2="155" y2="30" />
+      <line x1="155" y1="72" x2="172" y2="70" />
+      <line x1="140" y1="96" x2="148" y2="112" />
+      <line x1="65"  y1="98" x2="58"  y2="112" />
+      <line x1="58"  y1="62" x2="42"  y2="58" />
     </g>
-    {/* Ball with motion arc */}
-    <path d="M 70 80 Q 120 30 165 60" stroke="#fff" strokeWidth="1.5" strokeDasharray="2,2" fill="none" opacity="0.7" />
-    <circle cx="70" cy="80" r="6" fill="#fff" />
-    <circle cx="70" cy="80" r="6" fill="none" stroke="#1F2937" strokeWidth="1" />
-    <path d="M 70 76 L 73 78 L 72 82 L 68 82 L 67 78 Z" fill="#1F2937" />
+
+    {/* Flying debris shards */}
+    <polygon points="158,26 164,22 161,30" fill="#E8003D" opacity="0.75" />
+    <polygon points="172,55 178,50 177,60" fill="#FF4060" opacity="0.6" />
+    <polygon points="148,112 155,115 150,107" fill="#E8003D" opacity="0.65" />
+    <polygon points="42,52 36,48 38,56" fill="#FF4060" opacity="0.6" />
+    <polygon points="56,116 50,112 58,108" fill="#E8003D" opacity="0.55" />
+
+    {/* Football — white with classic black panels */}
+    <circle cx="105" cy="65" r="18" fill="url(#bc-ball)" />
+    {/* Pentagon centre */}
+    <polygon points="105,56 111,60 109,67 101,67 99,60" fill="#1a1a1a" opacity="0.85" />
+    {/* Side panels */}
+    <polygon points="99,60 93,57 91,63 96,68 101,67" fill="#1a1a1a" opacity="0.7" />
+    <polygon points="111,60 117,57 119,63 114,68 109,67" fill="#1a1a1a" opacity="0.7" />
+    <polygon points="105,56 111,60 115,53 109,48 101,48 95,53 99,60" fill="none" stroke="#1a1a1a" strokeWidth="0.5" opacity="0.4" />
+    {/* Shine */}
+    <ellipse cx="100" cy="59" rx="4" ry="2.5" fill="#fff" opacity="0.45" transform="rotate(-20,100,59)" />
+
+    {/* Power bar at bottom */}
+    <rect x="20" y="108" width="160" height="6" rx="3" fill="rgba(255,255,255,0.1)" />
+    <rect x="20" y="108" width="110" height="6" rx="3" fill="#E8003D" opacity="0.9" />
+    <text x="100" y="116" textAnchor="middle" fontSize="5" fill="rgba(255,255,255,0.5)" fontFamily="Outfit">POWER</text>
+
+    {/* Max payout hint */}
+    <g transform="translate(8, 8)">
+      <rect width="48" height="14" rx="3" fill="rgba(0,0,0,0.55)" />
+      <text x="24" y="10" textAnchor="middle" fontSize="9" fontWeight="700" fill="#39FF7C" fontFamily="Outfit">CRUSH!</text>
+    </g>
   </svg>
 );
 
@@ -317,7 +358,7 @@ export const FruitFrenzyTileArt = () => (
 export const GAME_TILE_ART = {
   'aviator': AviatorArt,
   'sporty-jet': SportyJetArt,
-  'sporty-kick': SportyKickArt,
+  'ball-crush': BallCrushArt,
   'spin-bottle': SpinBottleArt,
   'mines': MinesArt,
   'magic-ball': MagicBallArt,
