@@ -1,0 +1,372 @@
+/* =========================================
+   VIRTUAL FOOTBALL — styles.css
+   ========================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0A0A0A;
+  color: #FFFFFF;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── TOP BAR ───────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #111111;
+  border-bottom: 1px solid #2A2A2A;
+  height: 56px;
+  position: relative;
+  z-index: 10;
+}
+
+.logo {
+  font-family: 'Orbitron', monospace;
+  font-weight: 900;
+  font-size: 1.3rem;
+  color: #00E676;
+  letter-spacing: 0.05em;
+}
+
+.balance-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.balance-label { font-size: 0.65rem; color: #888888; text-transform: uppercase; letter-spacing: 0.08em; }
+.balance-val { font-family: 'Roboto Mono', monospace; font-size: 1.1rem; font-weight: 600; color: #00E676; }
+
+/* ── GAME CONTAINER — now 2 columns only ── */
+.game-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;   /* bet panel | pitch fills rest */
+  height: calc(100vh - 56px);
+}
+
+/* ── BETTING PANEL (LEFT) ──────────────── */
+.bet-panel {
+  padding: 1rem;
+  border-right: 1px solid #2A2A2A;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.glass-panel {
+  background: rgba(17, 17, 17, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.panel-title {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #888888;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+/* Match Info */
+.match-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 8px;
+}
+
+.team { display: flex; align-items: center; gap: 0.5rem; }
+.team-name { font-family: 'Poppins', system-ui, sans-serif; font-size: 0.7rem; font-weight: 600; color: #FFFFFF; }
+.team-color { width: 12px; height: 12px; border-radius: 50%; }
+
+.vs {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #888888;
+}
+
+/* Score Display */
+.score-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(232, 0, 61, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(232, 0, 61, 0.2);
+}
+
+.score {
+  font-family: 'Orbitron', monospace;
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #FFFFFF;
+  min-width: 60px;
+  text-align: center;
+}
+
+.score-divider {
+  font-family: 'Orbitron', monospace;
+  font-size: 2rem;
+  color: #888888;
+}
+
+/* Timer */
+.timer-wrap {
+  text-align: center;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.timer-label {
+  font-size: 0.65rem;
+  color: #888888;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3rem;
+}
+
+.timer-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #00D4FF;
+  margin-bottom: 0.5rem;
+}
+
+.timer-bar-track {
+  width: 100%;
+  height: 4px;
+  background: #1C1C1C;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.timer-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00D4FF, #00E676);
+  border-radius: 2px;
+  transition: width 0.5s linear;
+  width: 100%;
+}
+
+/* Bet Section */
+.bet-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.bet-label {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #00D4FF;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.market-btns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+}
+
+.market-btns.two-col {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mkt-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.3rem;
+  background: #1C1C1C;
+  border: 1px solid #2A2A2A;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mkt-btn:hover { border-color: #00D4FF; background: rgba(0, 212, 255, 0.1); }
+.mkt-btn.selected { border-color: #00E676; background: rgba(0, 230, 118, 0.15); }
+
+.mkt-label {
+  font-size: 0.6rem;
+  color: #888888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mkt-odds {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+/* Bet Input */
+.bet-input-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.btn-adj {
+  background: #1C1C1C;
+  border: 1px solid #2A2A2A;
+  color: #888888;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+.btn-adj:hover { border-color: #00D4FF; color: #00D4FF; }
+
+.bet-input {
+  flex: 1;
+  background: #1C1C1C;
+  border: 1px solid #2A2A2A;
+  color: #FFFFFF;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.9rem;
+  text-align: center;
+}
+.bet-input:focus { outline: none; border-color: #00D4FF; }
+
+.quick-bets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; }
+
+.btn-quick {
+  background: #1C1C1C;
+  border: 1px solid #2A2A2A;
+  color: #888888;
+  padding: 0.35rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-quick:hover { border-color: #00D4FF; color: #00D4FF; background: rgba(0, 212, 255, 0.1); }
+
+/* Selected Bet */
+.selected-bet {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  background: rgba(0, 230, 118, 0.08);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  border-radius: 6px;
+}
+
+.sel-label { font-size: 0.7rem; color: #888888; }
+.sel-value { font-family: 'Roboto Mono', monospace; font-size: 0.8rem; color: #00E676; }
+
+/* Place Bet Button */
+.btn-bet {
+  background: linear-gradient(135deg, #00E676, #00B25A);
+  color: #0A0A0A;
+  border: none;
+  padding: 0.7rem;
+  border-radius: 8px;
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.35);
+}
+.btn-bet:hover { box-shadow: 0 0 30px rgba(0, 230, 118, 0.55); }
+.btn-bet:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.bet-status {
+  font-size: 0.75rem;
+  text-align: center;
+  min-height: 20px;
+  color: #00E676;
+}
+
+/* Match Stats (inline in left panel) */
+.stats-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid #2A2A2A;
+  padding-top: 0.8rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  font-size: 0.75rem;
+}
+
+.stat-label { color: #888888; }
+.stat-value { font-family: 'Roboto Mono', monospace; color: #FFFFFF; font-weight: 600; }
+.stat-divider { border: none; border-top: 1px solid #2A2A2A; margin: 0.5rem 0; }
+
+/* ── PITCH SECTION — fills all remaining width ── */
+.pitch-section {
+  position: relative;
+  background: #0A0A0A;
+  overflow: hidden;
+}
+
+#pitchCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.events-feed {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.event-item {
+  background: rgba(17, 17, 17, 0.9);
+  border: 1px solid #2A2A2A;
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-family: 'Roboto Mono', monospace;
+  color: #FFFFFF;
+  animation: eventSlide 0.3s ease, eventFade 0.3s ease 2.5s forwards;
+  white-space: nowrap;
+}
+
+.event-item.goal { border-color: #00E676; color: #00E676; }
+.event-item.card { border-color: #FFB300; color: #FFB300; }
+
+@keyframes eventSlide {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes eventFade {
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ── SCROLLBAR ───────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00D4FF; }

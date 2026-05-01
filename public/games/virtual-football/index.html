@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VIRTUAL FOOTBALL — INSTANT VIRTUALS</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../_speedbet-theme.css" />
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="logo">⚽ VIRTUAL FOOTBALL</div>
+    <div class="balance-wrap">
+      <span class="balance-label">BALANCE</span>
+      <span class="balance-val" id="balanceDisplay">$1,000.00</span>
+    </div>
+  </header>
+
+  <main class="game-container">
+    <!-- LEFT: BETTING PANEL -->
+    <aside class="bet-panel glass-panel">
+      <h3 class="panel-title">PLACE BET</h3>
+
+      <!-- Match Info -->
+      <div class="match-info">
+        <div class="team home">
+          <span class="team-name" id="homeTeam">RED DEVILS</span>
+          <span class="team-color" id="homeColor" style="background:#E8003D"></span>
+        </div>
+        <div class="vs">VS</div>
+        <div class="team away">
+          <span class="team-color" id="awayColor" style="background:#00D4FF"></span>
+          <span class="team-name" id="awayTeam">BLUE EAGLES</span>
+        </div>
+      </div>
+
+      <!-- Score Display -->
+      <div class="score-display">
+        <div class="score" id="homeScore">0</div>
+        <div class="score-divider">:</div>
+        <div class="score" id="awayScore">0</div>
+      </div>
+
+      <!-- Timer -->
+      <div class="timer-wrap">
+        <div class="timer-label">MATCH TIME</div>
+        <div class="timer-value" id="timerValue">90:00</div>
+        <div class="timer-bar-track">
+          <div class="timer-bar-fill" id="timerBar"></div>
+        </div>
+      </div>
+
+      <!-- Betting Options -->
+      <div class="bet-section">
+        <div class="bet-label">1X2 MARKET</div>
+        <div class="market-btns">
+          <button class="mkt-btn" data-bet="home" id="btnHome">
+            <span class="mkt-label">HOME</span>
+            <span class="mkt-odds" id="homeOdds">2.10</span>
+          </button>
+          <button class="mkt-btn" data-bet="draw" id="btnDraw">
+            <span class="mkt-label">DRAW</span>
+            <span class="mkt-odds" id="drawOdds">3.40</span>
+          </button>
+          <button class="mkt-btn" data-bet="away" id="btnAway">
+            <span class="mkt-label">AWAY</span>
+            <span class="mkt-odds" id="awayOdds">2.90</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="bet-section">
+        <div class="bet-label">OVER / UNDER 2.5</div>
+        <div class="market-btns two-col">
+          <button class="mkt-btn" data-bet="over" id="btnOver">
+            <span class="mkt-label">OVER 2.5</span>
+            <span class="mkt-odds" id="overOdds">1.85</span>
+          </button>
+          <button class="mkt-btn" data-bet="under" id="btnUnder">
+            <span class="mkt-label">UNDER 2.5</span>
+            <span class="mkt-odds" id="underOdds">1.95</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bet Amount -->
+      <div class="bet-section">
+        <label class="field-label">BET AMOUNT</label>
+        <div class="bet-input-row">
+          <button class="btn-adj" onclick="adjBet(0.5)">½</button>
+          <input class="bet-input" id="betAmt" type="number" value="10" min="1" max="1000" />
+          <button class="btn-adj" onclick="adjBet(2)">2×</button>
+        </div>
+        <div class="quick-bets">
+          <button class="btn-quick" onclick="setBet(5)">$5</button>
+          <button class="btn-quick" onclick="setBet(10)">$10</button>
+          <button class="btn-quick" onclick="setBet(25)">$25</button>
+          <button class="btn-quick" onclick="setBet(50)">$50</button>
+        </div>
+      </div>
+
+      <!-- Selected Bet -->
+      <div class="selected-bet" id="selectedBet">
+        <span class="sel-label">SELECTED:</span>
+        <span class="sel-value" id="selValue">None</span>
+      </div>
+
+      <button class="btn-bet" id="placeBetBtn" onclick="placeBet()">PLACE BET</button>
+
+      <div class="bet-status" id="betStatus"></div>
+
+      <!-- Match Stats (moved from right panel) -->
+      <div class="stats-inline">
+        <div class="panel-title" style="margin-top:0.5rem">MATCH STATS</div>
+        <div class="stat-row">
+          <span class="stat-label" id="homeStatsLabel">RED DEVILS</span>
+          <span class="stat-value" id="homeShots">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Shots on Target</span>
+          <span class="stat-value" id="homeShotsOnTarget">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Possession</span>
+          <span class="stat-value" id="homePossession">50%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Corners</span>
+          <span class="stat-value" id="homeCorners">0</span>
+        </div>
+        <hr class="stat-divider" />
+        <div class="stat-row">
+          <span class="stat-label" id="awayStatsLabel">BLUE EAGLES</span>
+          <span class="stat-value" id="awayShots">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Shots on Target</span>
+          <span class="stat-value" id="awayShotsOnTarget">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Possession</span>
+          <span class="stat-value" id="awayPossession">50%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Corners</span>
+          <span class="stat-value" id="awayCorners">0</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER: PITCH (now full remaining width) -->
+    <section class="pitch-section">
+      <canvas id="pitchCanvas"></canvas>
+      <div class="events-feed" id="eventsFeed"></div>
+    </section>
+
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>

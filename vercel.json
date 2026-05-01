@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!games/|assets/|favicon|.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

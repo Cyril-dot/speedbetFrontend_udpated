@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#5B21B6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <!-- Football pentagons -->
+  <circle cx="32" cy="32" r="18" fill="#FFFFFF"/>
+  <path d="M32 18 L40 24 L37 33 L27 33 L24 24 Z" fill="#1F2937"/>
+  <path d="M32 18 L40 24 L48 22" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M32 18 L24 24 L16 22" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M27 33 L24 42 L18 42" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M37 33 L40 42 L46 42" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M27 33 L32 38 L37 33" stroke="#1F2937" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
