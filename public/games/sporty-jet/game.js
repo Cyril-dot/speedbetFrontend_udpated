@@ -23,7 +23,7 @@
    0. CONFIG
    ══════════════════════════════════════════════════════════════ */
 const CONFIG = {
-  API_BASE:        'http://localhost:8080',
+  API_BASE:        'https://speedbetbackend-production.up.railway.app',
   WS_ENDPOINT:     '/ws',
   GAME_SLUG:       'sporty-jet',
   RECONNECT_DELAY: 3000,

@@ -1,46 +1,44 @@
+'use strict';
+
 /* =========================================
    VIRTUAL FOOTBALL — game.js
    Fully Integrated — SpeedBet API v1 — May 2026
 
-   Architecture mirrors Aviator/Mines/MagicBall pattern:
-     1.  CONFIG          — shared constants
-     2.  SpeedBetAPI     — token helpers + REST with 401→refresh→retry + endpoint groups
-     3.  WSBus           — STOMP/SockJS hub with auto-reconnect
-     4.  Wallet          — optimistic balance with get/set/deduct/credit + WS sync
-     5.  MatchRound      — round tracking: placeBet, settle
-     6.  State           — game state manager
-     7.  TEAMS           — team data + random picker
-     8.  Odds            — odds engine
-     9.  Renderer        — canvas pitch renderer
-    10.  UI              — DOM controller + auth gate
-    11.  AuthReactor     — central login/logout/expiry handler + form wiring
-    12.  Game            — main orchestrator (start / pause / resume)
+   Architecture mirrors Aviator game.js exactly:
+     0.  CONFIG          — shared constants (BASE matches Aviator)
+     1.  SpeedBetAPI     — token helpers + REST with 401→refresh→retry + endpoint groups
+     2.  WSBus           — STOMP/SockJS hub with auto-reconnect
+     3.  Wallet          — optimistic balance with get/set/deduct/credit + WS sync
+     4.  MatchRound      — round tracking: placeBet, settle
+     5.  State           — game state manager
+     6.  TEAMS           — team data + random picker
+     7.  Odds            — odds engine
+     8.  Renderer        — canvas pitch renderer
+     9.  UI              — DOM controller + auth gate
+    10.  AuthReactor     — central login/logout/expiry handler + form wiring
+    11.  Game            — main orchestrator (start / pause / resume)
    ========================================= */
-
-'use strict';
 
 /* =========================================
-   0. CONFIG
+   0. CONFIG  — mirrors Aviator CONFIG exactly
    ========================================= */
 const CONFIG = {
-  BASE:            '',          // set to 'http://localhost:8080' for local dev; '' for same-origin
-  API_BASE:        '/api',
+  BASE:            'https://speedbetbackend-production.up.railway.app',
   WS_ENDPOINT:     '/ws',
   GAME_SLUG:       'football',
   RECONNECT_DELAY: 3000,
-  MATCH_DURATION:  30,          // seconds per match (30s real-time = 90 match minutes)
-  COUNTDOWN_SECS:  8,           // seconds between matches
+  MATCH_DURATION:  30,   // seconds per match (30s real-time = 90 match minutes)
+  COUNTDOWN_SECS:  8,    // seconds between matches
 };
 
 /* =========================================
    1. SPEEDBET API SERVICE
    Mirrors Aviator SpeedBetAPI exactly.
-   Token key consistent: 'sb_token'.
-   All paths prepend CONFIG.BASE + CONFIG.API_BASE.
+   All paths: CONFIG.BASE + '/api' + path
+   Token key: 'sb_token'  (shared with Aviator — same session)
    ========================================= */
 const SpeedBetAPI = (() => {
 
-  // ── Token helpers ──────────────────────────────────────────
   const TOKEN_KEY = 'sb_token';
   const USER_KEY  = 'sb_user';
 
@@ -60,8 +58,7 @@ const SpeedBetAPI = (() => {
   const setUser  = u  => localStorage.setItem(USER_KEY, JSON.stringify(u));
   const isAuthed = () => !!getToken();
 
-  // ── Core fetch ─────────────────────────────────────────────
-  // Unwraps { data: T } envelope or returns root object.
+  // ── Core fetch — mirrors Aviator _req exactly ──────────────
   async function _req(path, options = {}, auth = false, retrying = false) {
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
     if (auth) {
@@ -71,12 +68,11 @@ const SpeedBetAPI = (() => {
     }
     let res;
     try {
-      res = await fetch(CONFIG.BASE + CONFIG.API_BASE + path, { ...options, headers, credentials: 'include' });
+      res = await fetch(CONFIG.BASE + path, { ...options, headers });
     } catch {
       throw new Error('NETWORK_ERROR');
     }
 
-    // 401 → try silent refresh once
     if (res.status === 401 && !retrying) {
       const refreshed = await _silentRefresh();
       if (refreshed) return _req(path, options, auth, true);
@@ -85,7 +81,7 @@ const SpeedBetAPI = (() => {
 
     if (!res.ok) {
       let message = `HTTP ${res.status}`;
-      try { const err = await res.json(); message = err.message ?? err.error ?? message; } catch { /* ignore */ }
+      try { const err = await res.json(); message = err.message ?? err.error ?? message; } catch { /**/ }
       throw new Error(message);
     }
 
@@ -95,7 +91,7 @@ const SpeedBetAPI = (() => {
 
   async function _silentRefresh() {
     try {
-      const res = await fetch(CONFIG.BASE + CONFIG.API_BASE + '/auth/refresh', {
+      const res = await fetch(CONFIG.BASE + '/api/auth/refresh', {
         method: 'POST', credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -119,57 +115,57 @@ const SpeedBetAPI = (() => {
   const _get  = (path, auth = false)       => _req(path, { method: 'GET' }, auth);
   const _post = (path, body, auth = false) => _req(path, { method: 'POST', body: JSON.stringify(body) }, auth);
 
-  // ── AUTH endpoints ─────────────────────────────────────────
+  // ── AUTH endpoints — identical paths to Aviator ────────────
   const auth = {
     login: async (email, password) => {
-      const data = await _post('/auth/login', { email, password });
+      const data = await _post('/api/auth/login', { email, password });
       setToken(data.accessToken);
       if (data.user) setUser(data.user);
       return data;
     },
     register: async payload => {
-      const data = await _post('/auth/register', payload);
+      const data = await _post('/api/auth/register', payload);
       setToken(data.accessToken);
       if (data.user) setUser(data.user);
       return data;
     },
     demoLogin: async (role = 'USER') => {
-      const data = await _post('/auth/demo-login', { role });
+      const data = await _post('/api/auth/demo-login', { role });
       setToken(data.accessToken);
       if (data.user) setUser(data.user);
       return data;
     },
     refresh: async () => {
-      const data = await _post('/auth/refresh', undefined, true);
+      const data = await _post('/api/auth/refresh', undefined, true);
       setToken(data.accessToken);
       return data;
     },
     logout: async () => {
-      try { await _post('/auth/logout', undefined, true); } finally { clearToken(); }
+      try { await _post('/api/auth/logout', undefined, true); } finally { clearToken(); }
     },
   };
 
   // ── WALLET endpoints ───────────────────────────────────────
   const wallet = {
-    get:          ()            => _get('/wallet', true),
-    transactions: (p = 0, s = 20) => _get(`/wallet/transactions?page=${p}&size=${s}`, true),
-    withdraw:     payload       => _post('/wallet/withdraw', payload, true),
+    get:          ()               => _get('/api/wallet', true),
+    transactions: (p = 0, s = 20) => _get(`/api/wallet/transactions?page=${p}&size=${s}`, true),
+    withdraw:     payload          => _post('/api/wallet/withdraw', payload, true),
   };
 
   // ── GAMES endpoints ────────────────────────────────────────
   // POST /api/games/{slug}/play    { stake, betType, odds }  → GameRound { id, walletBalance, … }
   // POST /api/games/{slug}/settle  { game, stake, result, roundId } → { newBalance, payout }
   const games = {
-    currentRound: game           => _get(`/games/${game}/current-round`, true),
-    history:      (limit = 20)   => _get(`/games/history?limit=${limit}`, true),
-    play:         (game, payload) => _post(`/games/${game}/play`,   payload, true),
-    settle:       (game, payload) => _post(`/games/${game}/settle`, payload, true),
+    currentRound: game            => _get(`/api/games/${game}/current-round`, true),
+    history:      (limit = 20)    => _get(`/api/games/history?limit=${limit}`, true),
+    play:         (game, payload) => _post(`/api/games/${game}/play`,   payload, true),
+    settle:       (game, payload) => _post(`/api/games/${game}/settle`, payload, true),
   };
 
   // ── USER endpoint ──────────────────────────────────────────
   const user = {
-    me:     ()      => _get('/users/me', true),
-    update: payload => _post('/users/me', payload, true),
+    me:     ()      => _get('/api/users/me', true),
+    update: payload => _post('/api/users/me', payload, true),
   };
 
   // ── Cross-tab token sync ───────────────────────────────────
@@ -195,7 +191,7 @@ const SpeedBetAPI = (() => {
    ========================================= */
 const WSBus = (() => {
   let client = null, connected = false;
-  const pending = {}; // topic → callback (last-writer-wins)
+  const pending = {};
 
   function connect(onReady) {
     if (typeof SockJS === 'undefined' || typeof Stomp === 'undefined') {
@@ -231,7 +227,7 @@ const WSBus = (() => {
   }
 
   function disconnect() {
-    try { if (client && connected) client.disconnect(); } catch { /* ignore */ }
+    try { if (client && connected) client.disconnect(); } catch { /**/ }
     client = null; connected = false;
   }
 
@@ -242,8 +238,8 @@ const WSBus = (() => {
 
 /* =========================================
    3. WALLET MANAGER
-   Optimistic balance with get/set/deduct/credit.
-   Server balance reconciled via WS push + API calls.
+   Mirrors Aviator Wallet exactly.
+   Optimistic balance; server reconciled via WS + API.
    ========================================= */
 const Wallet = (() => {
   let _balance = 0;
@@ -266,7 +262,7 @@ const Wallet = (() => {
         const data = JSON.parse(msg.body);
         _balance = parseFloat(data.balance ?? data.amount ?? _balance);
         UI.updateBalance(_balance);
-      } catch { /* ignore */ }
+      } catch { /**/ }
     });
   }
 
@@ -282,17 +278,17 @@ const Wallet = (() => {
    4. MATCH ROUND MANAGER
    Wraps SpeedBetAPI.games.play / settle
    with per-match round-id tracking.
+   Mirrors Aviator CrashRound pattern.
    ========================================= */
 const MatchRound = (() => {
   let _roundId = null;
   let _settled = false;
 
-  // POST /api/games/football/play { stake, betType, odds }
+  // POST /api/games/football/play { stake, betType, odds } → GameRound
   async function placeBet(stake, betType, odds) {
     const data = await SpeedBetAPI.games.play(CONFIG.GAME_SLUG, { stake, betType, odds });
     _roundId = data.id ?? null;
     _settled = false;
-    // Server is authoritative — reconcile wallet if balance returned
     if (data.walletBalance !== undefined) {
       Wallet.set(parseFloat(data.walletBalance));
       UI.updateBalance(Wallet.get());
@@ -314,10 +310,11 @@ const MatchRound = (() => {
     return data;
   }
 
-  function reset()      { _roundId = null; _settled = false; }
-  const getRoundId = () => _roundId;
+  function reset()        { _roundId = null; _settled = false; }
+  const getRoundId = ()   => _roundId;
+  const isSettled  = ()   => _settled;
 
-  return { placeBet, settle, reset, getRoundId };
+  return { placeBet, settle, reset, getRoundId, isSettled };
 })();
 
 /* =========================================
@@ -335,9 +332,9 @@ const State = (() => {
     awayScore:   0,
     matchTime:   0,
     betPlaced:   false,
-    selectedBet: null,        // 'home' | 'draw' | 'away' | 'over' | 'under'
+    selectedBet: null,   // 'home' | 'draw' | 'away' | 'over' | 'under'
     betAmount:   10,
-    betResult:   null,        // 'won' | 'lost'
+    betResult:   null,   // 'won' | 'lost'
     history:     [],
     stats: {
       homeShots: 0, awayShots: 0,
@@ -352,11 +349,8 @@ const State = (() => {
   const setPhase = p   => { s.phase = p; };
 
   const resetMatch = () => {
-    s.homeScore   = 0;
-    s.awayScore   = 0;
-    s.matchTime   = 0;
-    s.betPlaced   = false;
-    s.betResult   = null;
+    s.homeScore = 0; s.awayScore = 0; s.matchTime = 0;
+    s.betPlaced = false; s.betResult = null;
     s.stats = {
       homeShots: 0, awayShots: 0,
       homeShotsOnTarget: 0, awayShotsOnTarget: 0,
@@ -383,10 +377,7 @@ const State = (() => {
     if (s.history.length > 10) s.history.pop();
   };
 
-  return {
-    get, getPhase, setPhase,
-    resetMatch, placeBet, cancelBet, addHistory,
-  };
+  return { get, getPhase, setPhase, resetMatch, placeBet, cancelBet, addHistory };
 })();
 
 /* =========================================
@@ -435,7 +426,7 @@ const Odds = (() => {
     const homeWinProb = 0.38 + (Math.random() * 0.12);
     const drawProb    = 0.27 + (Math.random() * 0.06);
     const awayWinProb = 1 - homeWinProb - drawProb;
-    const toOdds      = p => parseFloat((0.93 / p).toFixed(2)); // ~7% margin
+    const toOdds      = p => parseFloat((0.93 / p).toFixed(2));  // ~7% margin
 
     return {
       home:  toOdds(homeWinProb),
@@ -495,8 +486,7 @@ const Renderer = (() => {
 
   function resetPlayers() {
     if (!canvas) return;
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = canvas.width, H = canvas.height;
     const s = State.get();
     const homeColor = (s.homeTeam || {}).color || '#E8003D';
     const awayColor = (s.awayTeam || {}).color || '#00D4FF';
@@ -530,16 +520,14 @@ const Renderer = (() => {
 
   function _movePlayers(dt) {
     if (State.getPhase() !== PHASES.RUNNING) return;
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = canvas.width, H = canvas.height;
 
     [...players.home, ...players.away].forEach(p => {
       if (p.targetX === null) {
         p.targetX = Math.max(20, Math.min(W - 20, p.x + (Math.random() - 0.5) * W * 0.3));
         p.targetY = Math.max(20, Math.min(H - 20, p.y + (Math.random() - 0.5) * H * 0.3));
       }
-      const dx   = p.targetX - p.x;
-      const dy   = p.targetY - p.y;
+      const dx = p.targetX - p.x, dy = p.targetY - p.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < 5) { p.targetX = null; }
       else {
@@ -551,14 +539,12 @@ const Renderer = (() => {
 
   function _moveBall(dt) {
     if (State.getPhase() !== PHASES.RUNNING) return;
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = canvas.width, H = canvas.height;
 
     if (Math.random() < 0.01) {
       const all    = [...players.home, ...players.away];
       const target = all[Math.floor(Math.random() * all.length)];
-      const dx     = target.x - ball.x;
-      const dy     = target.y - ball.y;
+      const dx     = target.x - ball.x, dy = target.y - ball.y;
       const dist   = Math.sqrt(dx * dx + dy * dy) || 1;
       ball.vx = (dx / dist) * (2 + Math.random() * 3);
       ball.vy = (dy / dist) * (2 + Math.random() * 3);
@@ -567,14 +553,8 @@ const Renderer = (() => {
     ball.x += ball.vx * dt * 0.05;
     ball.y += ball.vy * dt * 0.05;
 
-    if (ball.x < 20 || ball.x > W - 20) {
-      ball.vx *= -1;
-      ball.x = Math.max(20, Math.min(W - 20, ball.x));
-    }
-    if (ball.y < 20 || ball.y > H - 20) {
-      ball.vy *= -1;
-      ball.y = Math.max(20, Math.min(H - 20, ball.y));
-    }
+    if (ball.x < 20 || ball.x > W - 20) { ball.vx *= -1; ball.x = Math.max(20, Math.min(W - 20, ball.x)); }
+    if (ball.y < 20 || ball.y > H - 20) { ball.vy *= -1; ball.y = Math.max(20, Math.min(H - 20, ball.y)); }
 
     if (ball.x < 30 && Math.abs(ball.y - H / 2) < H * 0.15) _triggerGoal('home');
     if (ball.x > W - 30 && Math.abs(ball.y - H / 2) < H * 0.15) _triggerGoal('away');
@@ -596,15 +576,14 @@ const Renderer = (() => {
     }
     UI.setScore(s.homeScore, s.awayScore);
     resetBall();
-    State.setPhase(PHASES.ENDED); // freeze briefly
+    State.setPhase(PHASES.ENDED);
     setTimeout(() => {
       if (!State.get().paused) State.setPhase(PHASES.RUNNING);
     }, 1200);
   }
 
   function _drawPitch() {
-    const W = canvas.width;
-    const H = canvas.height;
+    const W = canvas.width, H = canvas.height;
 
     const grass = ctx.createLinearGradient(0, 0, W, 0);
     grass.addColorStop(0,   '#0a3d0a');
@@ -825,8 +804,8 @@ const UI = (() => {
     document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('selected'));
   }
 
-  function setAuthError(msg)   { if (els.authError) els.authError.textContent = msg || ''; }
-  function setAuthLoading(on)  {
+  function setAuthError(msg)  { if (els.authError) els.authError.textContent = msg || ''; }
+  function setAuthLoading(on) {
     if (els.btnLogin)    els.btnLogin.disabled    = on;
     if (els.btnDemoUser) els.btnDemoUser.disabled = on;
   }
@@ -902,7 +881,7 @@ const AuthReactor = (() => {
 
   async function _onLogin() {
     WSBus.reconnect(() => Wallet.subscribeWS());
-    await Wallet.fetch();
+    await Wallet.fetch();   // GET /api/wallet → real balance
     UI.hideAuthGate();
     if (State.get().paused) Game.resume();
   }
@@ -922,7 +901,7 @@ const AuthReactor = (() => {
 
 /* =========================================
    11. GAME ORCHESTRATOR
-   Mirrors Aviator Game pattern.
+   Mirrors Aviator Game pattern exactly.
    Phases: WAITING → RUNNING → ENDED → WAITING
    ========================================= */
 const Game = (() => {
@@ -930,13 +909,13 @@ const Game = (() => {
   let _matchTimer        = null;
   let _startTime         = null;
 
-  /* ── networking ──────────────────────── */
+  /* ── networking — mirrors Aviator _startNetworking ───────── */
   async function _startNetworking() {
     WSBus.connect(() => Wallet.subscribeWS());
     await Wallet.fetch();
   }
 
-  /* ── pause / resume ──────────────────── */
+  /* ── pause / resume — mirrors Aviator pause/resume ───────── */
   function pause(message = 'Sign in to play.') {
     const s  = State.get();
     s.paused = true;
@@ -980,13 +959,17 @@ const Game = (() => {
     const eventsFeed = document.getElementById('eventsFeed');
     if (eventsFeed) eventsFeed.innerHTML = '';
 
-    // Enable betting controls if authenticated
+    // Enable betting controls if authenticated — mirrors Aviator setBetBtn logic
     if (SpeedBetAPI.isAuthed()) {
       document.querySelectorAll('.mkt-btn, .btn-quick, .btn-adj').forEach(b => b.disabled = false);
       const placeBetBtn = document.getElementById('placeBetBtn');
       const betAmt      = document.getElementById('betAmt');
-      if (placeBetBtn) { placeBetBtn.textContent = 'PLACE BET'; placeBetBtn.classList.remove('cancel-mode'); placeBetBtn.disabled = false; }
-      if (betAmt)      betAmt.disabled = false;
+      if (placeBetBtn) {
+        placeBetBtn.textContent = 'PLACE BET';
+        placeBetBtn.classList.remove('cancel-mode');
+        placeBetBtn.disabled = false;
+      }
+      if (betAmt) betAmt.disabled = false;
     }
 
     let sec = CONFIG.COUNTDOWN_SECS;
@@ -1013,24 +996,24 @@ const Game = (() => {
     State.setPhase(PHASES.RUNNING);
     _startTime = Date.now();
 
-    // Register bet with server now that match is starting
+    // POST /api/games/football/play — mirrors Aviator CrashRound.placeBet
     if (s.betPlaced && SpeedBetAPI.isAuthed()) {
       try {
         const odds  = Odds.getSelected();
         const round = await MatchRound.placeBet(s.betAmount, s.selectedBet, odds);
-        // MatchRound.placeBet reconciles wallet from server response
+        // Server authoritative balance reconciliation
         if (round.walletBalance !== undefined) {
           Wallet.set(parseFloat(round.walletBalance));
           UI.updateBalance(Wallet.get());
         }
       } catch (e) {
         if (e.message === 'SESSION_EXPIRED') return;
-        // Server unavailable — local deduction from State.placeBet still stands
+        // Server unavailable — local optimistic deduction from State.placeBet still stands
         console.warn('[Game] placeBet API failed, running locally:', e.message);
       }
     }
 
-    // Lock bet controls during match
+    // Lock bet controls during match — mirrors Aviator running state
     document.querySelectorAll('.mkt-btn, .btn-quick, .btn-adj').forEach(b => b.disabled = true);
     const placeBetBtn = document.getElementById('placeBetBtn');
     const betAmt      = document.getElementById('betAmt');
@@ -1116,22 +1099,22 @@ const Game = (() => {
 
     if (s.betPlaced && s.selectedBet) {
       let won = false;
-      if (s.selectedBet === 'home'  && s.homeScore > s.awayScore)   won = true;
-      if (s.selectedBet === 'draw'  && s.homeScore === s.awayScore)  won = true;
-      if (s.selectedBet === 'away'  && s.homeScore < s.awayScore)    won = true;
-      if (s.selectedBet === 'over'  && overUnder === 'over')         won = true;
-      if (s.selectedBet === 'under' && overUnder === 'under')        won = true;
+      if (s.selectedBet === 'home'  && s.homeScore > s.awayScore)  won = true;
+      if (s.selectedBet === 'draw'  && s.homeScore === s.awayScore) won = true;
+      if (s.selectedBet === 'away'  && s.homeScore < s.awayScore)   won = true;
+      if (s.selectedBet === 'over'  && overUnder === 'over')        won = true;
+      if (s.selectedBet === 'under' && overUnder === 'under')       won = true;
 
       const odds = Odds.getSelected();
 
       try {
-        // POST /api/games/football/settle
+        // POST /api/games/football/settle — mirrors Aviator cashout server call
         const settled = await MatchRound.settle(
           s.betAmount, s.selectedBet, odds,
           s.homeScore, s.awayScore, won
         );
 
-        // Server is authoritative — set balance from response
+        // Server authoritative balance — mirrors Aviator _doCashout reconciliation
         const serverBalance = parseFloat(
           settled?.newBalance ?? settled?.walletBalance ?? settled?.balance ?? NaN
         );
@@ -1141,12 +1124,11 @@ const Game = (() => {
 
         if (won) {
           const payout = parseFloat(settled?.payout ?? (s.betAmount * odds));
-          // If server didn't return a balance, credit locally
           if (isNaN(serverBalance)) Wallet.credit(payout);
           UI.setBetStatus(`Won $${payout.toFixed(2)}!`, '#00E676');
           s.betResult = 'won';
         } else {
-          // Stake already deducted optimistically — nothing more to do locally
+          // Stake already deducted optimistically
           UI.setBetStatus(`Lost $${s.betAmount.toFixed(2)}`, '#E8003D');
           s.betResult = 'lost';
         }
@@ -1154,7 +1136,7 @@ const Game = (() => {
       } catch (err) {
         if (err.message === 'SESSION_EXPIRED') return;
 
-        // Offline fallback — resolve locally
+        // Offline fallback — resolve locally, mirrors Aviator cashout sync failure handling
         console.warn('[endMatch] settle API failed, resolving locally:', err.message);
         if (won) {
           const winAmt = parseFloat((s.betAmount * odds).toFixed(2));
@@ -1178,10 +1160,10 @@ const Game = (() => {
       UI.addHistory();
     }
 
-    // Re-fetch authoritative balance after settle
+    // Re-fetch authoritative balance after settle — mirrors Aviator _doCrash pattern
     if (SpeedBetAPI.isAuthed()) {
       setTimeout(async () => {
-        try { await Wallet.fetch(); } catch { /* ignore */ }
+        try { await Wallet.fetch(); } catch { /**/ }
       }, 800);
     }
 
@@ -1204,20 +1186,20 @@ const Game = (() => {
   }
 
   function placeBet() {
-    if (State.get().paused)                       return;
-    if (!SpeedBetAPI.isAuthed())                  { UI.showAuthGate('Sign in to place bets.'); return; }
-    if (State.getPhase() !== PHASES.WAITING)       return;
+    if (State.get().paused)                   return;
+    if (!SpeedBetAPI.isAuthed())              { UI.showAuthGate('Sign in to place bets.'); return; }
+    if (State.getPhase() !== PHASES.WAITING)  return;
 
     const s = State.get();
-    if (!s.selectedBet)  { alert('Please select a market first!'); return; }
-    if (s.betPlaced)     { alert('Bet already placed for this match!'); return; }
+    if (!s.selectedBet) { alert('Please select a market first!'); return; }
+    if (s.betPlaced)    { alert('Bet already placed for this match!'); return; }
 
     const betAmtEl = document.getElementById('betAmt');
     const amt      = parseFloat(betAmtEl?.value);
     if (isNaN(amt) || amt < 1) { alert('Minimum bet is $1'); return; }
     if (amt > Wallet.get())    { alert('Insufficient balance'); return; }
 
-    State.placeBet(s.selectedBet, amt); // optimistic deduction via Wallet.deduct
+    State.placeBet(s.selectedBet, amt);  // optimistic deduction via Wallet.deduct
     UI.updateBalance(Wallet.get());
     UI.setBetStatus(`Bet placed: $${amt.toFixed(2)} on ${s.selectedBet.toUpperCase()}`, '#FFD166');
 
@@ -1227,7 +1209,7 @@ const Game = (() => {
 
   function cancelBet() {
     if (State.getPhase() !== PHASES.WAITING) return;
-    State.cancelBet(); // refunds via Wallet.credit
+    State.cancelBet();  // refunds via Wallet.credit
     UI.updateBalance(Wallet.get());
     UI.setBetStatus('');
     UI.clearBetSelection();
@@ -1269,17 +1251,17 @@ const Game = (() => {
     }
   }
 
-  /* ── BOOT ────────────────────────────── */
+  /* ── BOOT — mirrors Aviator Game.start exactly ───────────── */
   async function start() {
     _wireEvents();
     Renderer.init();
-    AuthReactor.init(); // register auth events before any network calls
+    AuthReactor.init();  // register auth events before any network calls
 
     if (!SpeedBetAPI.isAuthed()) {
-      // Guest mode — show auth gate but still run match visually
+      // Guest mode — show auth gate but still run match visually (demo mode)
       UI.updateBalance(0);
       UI.showAuthGate('Sign in to place bets.');
-      State.get().paused = false; // visual loop still runs
+      State.get().paused = false;  // visual loop still runs
       startWaiting();
       return;
     }

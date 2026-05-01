@@ -16,6 +16,13 @@
     11.  Stats            — UI stat panel updates
     12.  Effects          — particles, explosions, rain
     13.  GameCore         — orchestrates all modules (init / pause / resume)
+
+   FIXES vs previous version:
+     [Bug 1] Double-click race on clickTile — _starting flag blocks re-entry before API responds
+     [Bug 2] Optimistic debit now happens BEFORE the /start API call (matches Aviator pattern)
+     [Bug 3] state.balance getter/setter removed — all balance access goes directly through Wallet
+     [Fix 4] credentials:'include' removed from _req — matches Aviator; avoids CORS preflight issues
+     [Fix 5] _cashingOut flag added to cashOut() to block double-tap during HTTP round-trip
    ============================================= */
 
 'use strict';
@@ -25,23 +32,19 @@
    ═══════════════════════════════════════════════ */
 const CONFIG = {
   GAME_SLUG:       'mines',
-  BASE:            '',          // set to 'http://localhost:8080' for local dev; '' for same-origin
+  BASE:            'https://speedbetbackend-production.up.railway.app',
   API_BASE:        '/api',
   WS_ENDPOINT:     '/ws',
   GRID_SIZE:       25,
-  RTP:             0.97,        // must match app.mines.rtp
+  RTP:             0.97,
   RECONNECT_DELAY: 3000,
 };
 
 /* ═══════════════════════════════════════════════
    2. SPEEDBET API SERVICE
-   Mirrors Aviator's SpeedBetAPI module exactly —
-   token storage, silent refresh, data-unwrap,
-   all endpoint groups: auth / wallet / games / user.
    ═══════════════════════════════════════════════ */
 const SpeedBetAPI = (() => {
 
-  // ── Token helpers ──────────────────────────────────────────
   const TOKEN_KEY = 'sb_token';
   const USER_KEY  = 'sb_user';
 
@@ -61,14 +64,13 @@ const SpeedBetAPI = (() => {
   const setUser  = u  => localStorage.setItem(USER_KEY, JSON.stringify(u));
   const isAuthed = () => !!getToken();
 
-  // getUserId — prefer meta tag injection; fall back to stored user object
   const getUserId = () =>
     document.querySelector('meta[name="user-id"]')?.content
     || getUser()?.id
     || null;
 
   // ── Core fetch ─────────────────────────────────────────────
-  // Mirrors Aviator _req<T> — unwraps { data: T } or returns root.
+  // [Fix 4] credentials:'include' removed — matches Aviator pattern, avoids CORS preflight
   async function _req(path, options = {}, auth = false, retrying = false) {
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
     if (auth) {
@@ -78,12 +80,11 @@ const SpeedBetAPI = (() => {
     }
     let res;
     try {
-      res = await fetch(CONFIG.BASE + CONFIG.API_BASE + path, { ...options, headers, credentials: 'include' });
+      res = await fetch(CONFIG.BASE + CONFIG.API_BASE + path, { ...options, headers });
     } catch (e) {
       throw new Error('NETWORK_ERROR');
     }
 
-    // 401 → try silent refresh once
     if (res.status === 401 && !retrying) {
       const refreshed = await _silentRefresh();
       if (refreshed) return _req(path, options, auth, true);
@@ -103,8 +104,7 @@ const SpeedBetAPI = (() => {
   async function _silentRefresh() {
     try {
       const res = await fetch(CONFIG.BASE + CONFIG.API_BASE + '/auth/refresh', {
-        method:      'POST',
-        credentials: 'include',
+        method:  'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
@@ -128,7 +128,6 @@ const SpeedBetAPI = (() => {
   const _post  = (path, body, auth = false)  => _req(path, { method: 'POST',  body: JSON.stringify(body) }, auth);
   const _patch = (path, body, auth = false)  => _req(path, { method: 'PATCH', body: JSON.stringify(body) }, auth);
 
-  // ── AUTH endpoints ─────────────────────────────────────────
   const auth = {
     login: async (email, password) => {
       const data = await _post('/auth/login', { email, password });
@@ -158,28 +157,25 @@ const SpeedBetAPI = (() => {
     },
   };
 
-  // ── WALLET endpoints ───────────────────────────────────────
   const wallet = {
-    get:          ()           => _get('/wallet', true),
+    get:          ()               => _get('/wallet', true),
     transactions: (p = 0, s = 20) => _get(`/wallet/transactions?page=${p}&size=${s}`, true),
-    withdraw:     payload      => _post('/wallet/withdraw', payload, true),
+    withdraw:     payload          => _post('/wallet/withdraw', payload, true),
   };
 
-  // ── GAMES endpoints (Mines-specific) ──────────────────────
   const games = {
-    start:   payload => _post('/games/mines/start',   payload, true),
-    reveal:  payload => _post('/games/mines/reveal',  payload, true),
-    cashout: payload => _post('/games/mines/cashout', payload, true),
+    start:   payload      => _post('/games/mines/start',   payload, true),
+    reveal:  payload      => _post('/games/mines/reveal',  payload, true),
+    cashout: payload      => _post('/games/mines/cashout', payload, true),
     history: (limit = 20) => _get(`/games/history?limit=${limit}`, true),
   };
 
-  // ── USER endpoints ─────────────────────────────────────────
   const user = {
     me:     ()      => _get('/users/me', true),
     update: payload => _patch('/users/me', payload, true),
   };
 
-  // ── Cross-tab token sync (mirrors Mines original Auth module) ──
+  // Cross-tab token sync
   window.addEventListener('storage', (e) => {
     if (e.key !== TOKEN_KEY) return;
     if (!e.newValue && e.oldValue) {
@@ -199,13 +195,11 @@ const SpeedBetAPI = (() => {
 
 /* ═══════════════════════════════════════════════
    3. WSBUS — STOMP / SockJS WebSocket Hub
-   Mirrors Aviator WSBus exactly —
-   auto-reconnect, pending subs, tears down on logout.
    ═══════════════════════════════════════════════ */
 const WSBus = (() => {
   let client    = null;
   let connected = false;
-  const pending = {}; // topic → callback (last-writer-wins, same as Aviator)
+  const pending = {};
 
   function connect(onReady) {
     if (typeof SockJS === 'undefined' || typeof Stomp === 'undefined') {
@@ -228,10 +222,7 @@ const WSBus = (() => {
     client.connect(wsHeaders, () => {
       connected = true;
       console.log('[WSBus] Connected');
-      // Re-subscribe pending topics
-      Object.entries(pending).forEach(([topic, cb]) =>
-        client.subscribe(topic, cb)
-      );
+      Object.entries(pending).forEach(([topic, cb]) => client.subscribe(topic, cb));
       if (onReady) onReady();
     }, () => {
       connected = false;
@@ -260,7 +251,6 @@ const WSBus = (() => {
 
 /* ═══════════════════════════════════════════════
    4. WALLET — Optimistic balance + server sync
-   Mirrors Aviator Wallet with deduct/credit helpers.
    ═══════════════════════════════════════════════ */
 const Wallet = (() => {
   let _balance = 0;
@@ -285,7 +275,6 @@ const Wallet = (() => {
         const prev = _balance;
         _balance = parseFloat(data.balance ?? data.amount ?? _balance);
         _updateUI();
-        // Flash balance element on real-time change
         const el = document.getElementById('balance');
         if (el) {
           el.classList.remove('balance-win', 'balance-lose');
@@ -308,9 +297,6 @@ const Wallet = (() => {
 
 /* ═══════════════════════════════════════════════
    5. AUTH REACTOR
-   Central listener for auth events.
-   Wires the login form, demo button, and password
-   enter-key — mirrors Aviator AuthReactor._wireAuthForm().
    ═══════════════════════════════════════════════ */
 const AuthReactor = (() => {
   function init() {
@@ -355,7 +341,6 @@ const AuthReactor = (() => {
           const data = await SpeedBetAPI.auth.demoLogin('USER');
           window.dispatchEvent(new CustomEvent('auth:login', { detail: { user: data.user } }));
         } catch (e) {
-          // Demo endpoint unavailable — close gate and run locally
           console.warn('[AuthReactor] demo-login unavailable, running offline:', e.message);
           hideAuthGate();
           updateBalance();
@@ -399,10 +384,6 @@ const AuthReactor = (() => {
    6. FAIRNESS — Provably-Fair SHA-256 Verification
    ═══════════════════════════════════════════════ */
 const Fairness = (() => {
-  /**
-   * Verify SHA-256(serverSeed + userId + roundId) === commitHash.
-   * Called after round ends when server reveals the seed.
-   */
   async function verify(serverSeed, userId, roundId, commitHash) {
     if (!serverSeed || !userId || !roundId || !commitHash) return false;
     try {
@@ -438,6 +419,12 @@ const Fairness = (() => {
 
 /* ═══════════════════════════════════════════════
    7. STATE — Central State Manager
+
+   [Bug 3 fixed] state.balance getter/setter removed.
+   All balance reads use Wallet.get(), all writes use
+   Wallet.set() / Wallet.deduct() / Wallet.credit().
+   The old getter/setter was lost silently after every
+   `state = { ...state }` spread in newGame().
    ═══════════════════════════════════════════════ */
 let state = {
   active:      false,
@@ -448,16 +435,13 @@ let state = {
   bet:         10,
   bombCount:   3,
 
-  // Wallet balance — authoritative source is Wallet.get();
-  // kept here for legacy helpers that call state.balance directly
-  get balance()      { return Wallet.get(); },
-  set balance(v)     { Wallet.set(v); },
-
-  // Backend round tracking
   roundId:     null,
   commitHash:  null,
 
-  // Auth / pause tracking
+  // In-flight guards (see Bug 1, Bug 5 fixes)
+  _starting:   false,   // true while /start HTTP request is in-flight
+  _cashingOut: false,   // true while /cashout HTTP request is in-flight
+
   _paused:     false,
 };
 
@@ -630,18 +614,20 @@ function setBet(val) {
   if (el) el.value = val;
 }
 
-/**
- * Handle tile click.
- *
- * First click  → POST /games/mines/start   (debit stake, place bombs, reveal first tile)
- * Subsequent   → POST /games/mines/reveal  (check tile against server bomb list)
- */
+/* ─────────────────────────────────────────────────────────────
+   clickTile
+   [Bug 1 fixed] _starting flag blocks re-entry before the
+                 /start API responds, preventing double-click
+                 from firing two round-start requests.
+   [Bug 2 fixed] Wallet.deduct() is now called BEFORE the API
+                 call (optimistic debit), matching Aviator.
+                 If the API throws, we refund immediately.
+   ───────────────────────────────────────────────────────────── */
 async function clickTile(idx, el) {
   if (state.gameOver)               return;
   if (state.revealed.includes(idx)) return;
   if (state._paused)                return;
 
-  // Gate: must be authenticated to play
   if (!SpeedBetAPI.isAuthed()) {
     showAuthGate('Sign in to place bets.');
     return;
@@ -649,6 +635,9 @@ async function clickTile(idx, el) {
 
   // ── First click: start round server-side ──────────────────
   if (!state.active) {
+    // [Bug 1] block re-entry while the HTTP request is in-flight
+    if (state._starting) return;
+
     const bet = parseFloat(document.getElementById('betAmt').value) || 10;
     if (bet > Wallet.get()) {
       setMsg('Insufficient balance!', 'lose');
@@ -658,16 +647,17 @@ async function clickTile(idx, el) {
     state.bet       = bet;
     state.bombCount = +document.getElementById('mineSlider').value;
 
+    // [Bug 2] Optimistic debit BEFORE API call — matches Aviator pattern
+    state._starting = true;
+    Wallet.deduct(state.bet);
+    updateBalance();
+
     try {
       const res = await SpeedBetAPI.games.start({
         stake:        state.bet,
         bombCount:    state.bombCount,
         firstTileIdx: idx,
       });
-
-      // Optimistic local debit — real balance reconciled via WebSocket
-      Wallet.deduct(state.bet);
-      updateBalance();
 
       state.roundId    = res.roundId;
       state.commitHash = res.commitHash;
@@ -687,8 +677,15 @@ async function clickTile(idx, el) {
       );
 
     } catch (err) {
-      if (err.message === 'SESSION_EXPIRED') return;
-      setMsg(`Error starting round: ${err.message}`, 'lose');
+      // [Bug 2] Refund the optimistic debit if the API fails
+      Wallet.credit(state.bet);
+      updateBalance();
+      if (err.message !== 'SESSION_EXPIRED') {
+        setMsg(`Error starting round: ${err.message}`, 'lose');
+      }
+    } finally {
+      // [Bug 1] Always clear the in-flight flag
+      state._starting = false;
     }
     return;
   }
@@ -714,19 +711,16 @@ async function clickTile(idx, el) {
       showOverlay(false, 0);
       deactivateGameUI();
 
-      // Re-fetch real balance after bomb to reconcile with server
       setTimeout(async () => {
         try { await Wallet.fetch(); } catch { /* ignore */ }
       }, 800);
 
-      // Provably-fair verification now that server seed is revealed
       const userId = SpeedBetAPI.getUserId();
       if (userId && res.serverSeed) {
         Fairness.verify(res.serverSeed, userId, state.roundId, state.commitHash);
       }
 
     } else if (res.result === 'AUTO_WIN') {
-      // All safe tiles found — server credits automatically
       state.diamonds = res.diamondsFound;
       applyDiamond(idx, el);
       updateStats(state.diamonds, state.bombCount);
@@ -745,8 +739,9 @@ async function clickTile(idx, el) {
     }
 
   } catch (err) {
-    if (err.message === 'SESSION_EXPIRED') return;
-    setMsg(`Error revealing tile: ${err.message}`, 'lose');
+    if (err.message !== 'SESSION_EXPIRED') {
+      setMsg(`Error revealing tile: ${err.message}`, 'lose');
+    }
   }
 }
 
@@ -803,6 +798,8 @@ function updateSafeBar(remaining, bombs) {
   if (pctEl) pctEl.textContent = pct + '%';
 }
 
+// [Bug 3 fixed] updateBalance() reads directly from Wallet.get() —
+// no longer relies on state.balance which was lost after the spread in newGame().
 function updateBalance() {
   const el = document.getElementById('balance');
   if (el) {
@@ -815,15 +812,20 @@ function updateBalance() {
 
 /* ═══════════════════════════════════════════════
    CASH OUT
+   [Fix 5] _cashingOut flag prevents double-tap
+           during the HTTP round-trip, mirrors
+           Aviator's CrashRound.isCashedOut() guard.
    ═══════════════════════════════════════════════ */
 async function cashOut() {
   if (!state.active || state.diamonds === 0) return;
+  if (state._cashingOut) return;   // [Fix 5] double-tap guard
   if (!SpeedBetAPI.isAuthed()) { showAuthGate('Sign in to cash out.'); return; }
+
+  state._cashingOut = true;
 
   try {
     const res = await SpeedBetAPI.games.cashout({ roundId: state.roundId });
 
-    // Server is authoritative — reconcile balance
     if (res.newBalance !== undefined) {
       Wallet.set(parseFloat(res.newBalance));
       updateBalance();
@@ -835,14 +837,17 @@ async function cashOut() {
     handleCashoutSuccess(res.payout, res.multiplier, res.bombPositions, res.serverSeed);
 
   } catch (err) {
-    if (err.message === 'SESSION_EXPIRED') return;
-    // Fallback to local calculation if API is unreachable
-    console.error('[cashOut] server error, applying local fallback:', err.message);
-    const mult = getMultiplier(state.diamonds, state.bombCount);
-    const won  = parseFloat((state.bet * mult).toFixed(2));
-    Wallet.credit(won);
-    updateBalance();
-    handleCashoutSuccess(won, mult, [], null);
+    if (err.message !== 'SESSION_EXPIRED') {
+      // Fallback to local calculation if API is unreachable
+      console.error('[cashOut] server error, applying local fallback:', err.message);
+      const mult = getMultiplier(state.diamonds, state.bombCount);
+      const won  = parseFloat((state.bet * mult).toFixed(2));
+      Wallet.credit(won);
+      updateBalance();
+      handleCashoutSuccess(won, mult, [], null);
+    }
+  } finally {
+    state._cashingOut = false;
   }
 }
 
@@ -857,12 +862,10 @@ function handleCashoutSuccess(payout, multiplier, bombPositions, serverSeed) {
   triggerWinRain();
   deactivateGameUI();
 
-  // Re-fetch real balance to fully reconcile with server
   setTimeout(async () => {
     try { await Wallet.fetch(); } catch { /* ignore */ }
   }, 800);
 
-  // Provably-fair verification
   const userId = SpeedBetAPI.getUserId();
   if (serverSeed && userId) {
     Fairness.verify(serverSeed, userId, state.roundId, state.commitHash);
@@ -878,23 +881,29 @@ function startOrCashOut() {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   newGame
+   [Bug 3 fixed] No longer spreads state.balance.
+   State is reset cleanly without the getter/setter that was
+   being silently dropped by the object spread.
+   ───────────────────────────────────────────────────────────── */
 function newGame() {
   const bet       = parseFloat(document.getElementById('betAmt')?.value) || 10;
   const bombCount = +document.getElementById('mineSlider')?.value || 3;
 
-  // Preserve Wallet balance and paused flag — reset everything else
-  state = {
-    ...state,
-    active:      false,
-    gameOver:    false,
-    bombs:       [],
-    revealed:    [],
-    diamonds:    0,
-    bet,
-    bombCount,
-    roundId:     null,
-    commitHash:  null,
-  };
+  // Reset all game fields; wallet balance lives in Wallet module, not state
+  state.active      = false;
+  state.gameOver    = false;
+  state.bombs       = [];
+  state.revealed    = [];
+  state.diamonds    = 0;
+  state.bet         = bet;
+  state.bombCount   = bombCount;
+  state.roundId     = null;
+  state.commitHash  = null;
+  state._starting   = false;
+  state._cashingOut = false;
+  // _paused is intentionally NOT reset here
 
   buildGrid();
   hideOverlay();
@@ -1099,7 +1108,6 @@ function spawnBgParticles() {
 
 /* ═══════════════════════════════════════════════
    13. GAME CORE — Init / Pause / Resume
-   Mirrors Aviator Game.start() / pause() / resume()
    ═══════════════════════════════════════════════ */
 const GameCore = (() => {
 
@@ -1113,11 +1121,9 @@ const GameCore = (() => {
     syncMines();
     spawnBgParticles();
 
-    // Register auth reactivity before any network calls
     AuthReactor.init();
 
     if (!SpeedBetAPI.isAuthed()) {
-      // Show game in "guest" mode — balance zero, auth gate visible
       updateBalance();
       showAuthGate('Sign in to play.');
       state._paused = true;
@@ -1130,13 +1136,13 @@ const GameCore = (() => {
   }
 
   function pause(message = 'Game paused.') {
-    state._paused  = true;
-    state.active   = false;
-    state.gameOver = true; // prevent further tile clicks
-
-    // Abandon in-flight round gracefully (server will time out / settle)
-    state.roundId    = null;
-    state.commitHash = null;
+    state._paused     = true;
+    state.active      = false;
+    state.gameOver    = true;
+    state._starting   = false;
+    state._cashingOut = false;
+    state.roundId     = null;
+    state.commitHash  = null;
 
     buildGrid();
     deactivateGameUI();

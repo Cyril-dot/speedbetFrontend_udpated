@@ -4,7 +4,7 @@
    CONFIGURATION
    ============================================================ */
 const CONFIG = {
-  BASE:            'http://localhost:8080',
+  BASE:            'https://speedbetbackend-production.up.railway.app',
   WS_ENDPOINT:     '/ws',
   GAME_SLUG:       'aviator',
   RECONNECT_DELAY: 3000,

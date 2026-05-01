@@ -4,7 +4,7 @@
 // All authenticated endpoints send Bearer token from localStorage
 // ============================================================
 
-const BASE = "http://localhost:8080";
+const BASE = "https://speedbetbackend-production.up.railway.app";
 
 const getToken = (): string | null => {
   const t = localStorage.getItem("sb_token");
