@@ -39,7 +39,6 @@ export default function Wallet() {
   const [showWithdraw,   setShowWithdraw]   = useState(false);
   const [amount,         setAmount]         = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [method,         setMethod]         = useState('paystack');
   const [bankName,       setBankName]       = useState('');
   const [accountNumber,  setAccountNumber]  = useState('');
   const [accountName,    setAccountName]    = useState('');
@@ -51,9 +50,6 @@ export default function Wallet() {
     fetchWallet().finally(() => setLoading(false));
   }, [user]);
 
-  // Derive transactions from wallet.transactions (API shape) or wallet.transactions mapped
-  // The store sets wallet = raw API response from GET /api/wallet
-  // We normalise here so the UI always gets a consistent shape.
   const rawTransactions = wallet?.transactions ?? [];
   const transactions = rawTransactions.map((tx) => ({
     id:            tx.id,
@@ -74,7 +70,7 @@ export default function Wallet() {
   const quickAmounts    = QUICK_AMOUNTS[currency]     ?? QUICK_AMOUNTS.GHS;
   const symbol          = CURRENCY_SYMBOL[currency]   ?? '₵';
 
-  // ── Deposit: initialise Paystack/Stripe and redirect ──
+  // ── Deposit: initialise Paystack and redirect ──
   const submitDeposit = async () => {
     const a = +amount;
     if (!a || a < minDeposit) {
@@ -83,20 +79,12 @@ export default function Wallet() {
     }
 
     try {
-      if (method === 'paystack') {
-        const res = await useStore.getState().deposit({ amount: a, currency });
-        if (res?.error) throw new Error(res.error);
-        // Paystack returns an authorization_url — redirect user to it
-        if (res?.data?.authorizationUrl || res?.data?.authorization_url) {
-          window.location.href = res.data.authorizationUrl ?? res.data.authorization_url;
-        } else {
-          pushToast({ variant: 'win', title: 'Deposit initiated', message: 'Follow the payment instructions.' });
-        }
+      const res = await useStore.getState().deposit({ amount: a, currency });
+      if (res?.error) throw new Error(res.error);
+      if (res?.data?.authorizationUrl || res?.data?.authorization_url) {
+        window.location.href = res.data.authorizationUrl ?? res.data.authorization_url;
       } else {
-        // Stripe intent
-        const res = await useStore.getState().deposit({ amount: a, currency, provider: 'stripe' });
-        if (res?.error) throw new Error(res.error);
-        pushToast({ variant: 'win', title: 'Stripe payment initiated', message: `${fmtMoneyWithCode(a, currency)} via Stripe` });
+        pushToast({ variant: 'win', title: 'Deposit initiated', message: 'Follow the payment instructions.' });
       }
       setShowDeposit(false);
       setAmount('');
@@ -145,7 +133,6 @@ export default function Wallet() {
     setAccountNumber('');
     setAccountName('');
 
-    // Re-fetch wallet to get updated balance + new transaction row
     fetchWallet();
   };
 
@@ -269,7 +256,7 @@ export default function Wallet() {
             <ShieldIcon size={20} color="#00D4FF" className="shrink-0 mt-0.5" />
             <div>
               <div className="text-[10px] caps text-electric-400">SECURE PAYMENTS</div>
-              <div className="text-white-100 text-sm">Powered by Paystack &amp; Stripe. End-to-end encrypted. PCI-DSS compliant.</div>
+              <div className="text-white-100 text-sm">Powered by Paystack. End-to-end encrypted. PCI-DSS compliant.</div>
               <div className="text-white-60 text-xs mt-1">All transactions are encrypted and processed securely.</div>
             </div>
           </div>
@@ -311,23 +298,6 @@ export default function Wallet() {
                 {n.toLocaleString()}
               </button>
             ))}
-          </div>
-
-          {/* Method */}
-          <div>
-            <div className="text-[10px] caps text-white-60 mb-2">METHOD</div>
-            <div className="grid grid-cols-2 gap-2">
-              {['paystack', 'stripe'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMethod(m)}
-                  className={`p-3 border-2 transition-all ${method === m ? 'border-crimson-400 bg-crimson-400/10' : 'border-black-700 bg-black-800'}`}
-                >
-                  <div className="font-display text-lg text-white-100" style={{ fontFamily: 'Outfit' }}>{m.toUpperCase()}</div>
-                  <div className="text-white-60 text-xs">{m === 'paystack' ? 'Mobile Money / Card' : 'Card · Worldwide'}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           <Button variant="primary" size="lg" className="w-full" onClick={submitDeposit}>
