@@ -43,8 +43,29 @@ function adaptAdminMatch(m) {
     score:   { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
     minute:  m.minutePlayed ?? m.metadata?.current_minute ?? null,
     kickoff: m.kickoffAt ?? null,
-    odds:    m.odds ?? null,
+    odds:    null, // odds fetched separately via oddsAll()
   };
+}
+
+// ─── Fetch admin matches and enrich each with odds from oddsAll ───────────────
+async function fetchAdminMatchesWithOdds() {
+  const data = await adminMatchesApi.all();
+  const adapted = (data ?? [])
+    .map(adaptAdminMatch)
+    .filter((m) => m.status !== 'FINISHED'); // never show finished
+
+  const withOdds = await Promise.all(
+    adapted.map(async (m) => {
+      try {
+        const bundle = await adminMatchesApi.oddsAll(m.id);
+        return { ...m, odds: bundle?.match_result ?? null };
+      } catch {
+        return m;
+      }
+    })
+  );
+
+  return withOdds;
 }
 
 function MatchSkeleton() {
@@ -85,18 +106,8 @@ function ForYouMatchCard({ match, onHide }) {
   const [hovered, setHovered] = useState(false);
   const [visible, setVisible] = useState(true);
 
-  const isLive     = match.status === 'LIVE';
-  const isFinished = match.status === 'FINISHED';
-  const hasScore   = match.score?.home != null && match.score?.away != null;
-
-  useEffect(() => {
-    if (!isFinished) return;
-    const timer = setTimeout(() => {
-      setVisible(false);
-      onHide?.(match.id);
-    }, 5 * 60 * 1000);
-    return () => clearTimeout(timer);
-  }, [isFinished, match.id, onHide]);
+  const isLive   = match.status === 'LIVE';
+  const hasScore = match.score?.home != null && match.score?.away != null;
 
   if (!visible) return null;
 
@@ -166,12 +177,10 @@ function ForYouMatchCard({ match, onHide }) {
             />
             Live{match.minute ? ` · ${match.minute}'` : ''}
           </span>
-        ) : isFinished ? (
-          <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Full Time</span>
         ) : (
           <span style={{ fontSize: 9, fontWeight: 700, color: '#63d2ff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Curated</span>
         )}
-        {!hasScore && !isFinished && (
+        {!hasScore && (
           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontWeight: 600 }}>Tap to bet →</span>
         )}
       </div>
@@ -227,18 +236,14 @@ export default function Live() {
     setHiddenIds((prev) => new Set([...prev, id]));
   }, []);
 
+  // ─── For You: admin matches with odds, no finished ────────────────────────
   useEffect(() => {
     let cancelled = false;
 
     async function loadForYou() {
       try {
-        const data = await adminMatchesApi.all();
-        if (!cancelled) {
-          const adapted  = (data ?? []).map(adaptAdminMatch);
-          const active   = adapted.filter((m) => m.status !== 'FINISHED');
-          const finished = adapted.filter((m) => m.status === 'FINISHED');
-          setForYouMatches([...active, ...finished].slice(0, 12));
-        }
+        const withOdds = await fetchAdminMatchesWithOdds();
+        if (!cancelled) setForYouMatches(withOdds.slice(0, 12));
       } catch (err) {
         console.error('Live: failed to load admin matches', err);
       } finally {
@@ -250,19 +255,15 @@ export default function Live() {
 
     const iv = setInterval(async () => {
       try {
-        const data = await adminMatchesApi.all();
-        if (!cancelled) {
-          const adapted  = (data ?? []).map(adaptAdminMatch);
-          const active   = adapted.filter((m) => m.status !== 'FINISHED');
-          const finished = adapted.filter((m) => m.status === 'FINISHED');
-          setForYouMatches([...active, ...finished].slice(0, 12));
-        }
+        const withOdds = await fetchAdminMatchesWithOdds();
+        if (!cancelled) setForYouMatches(withOdds.slice(0, 12));
       } catch { /* silent */ }
     }, 30_000);
 
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
+  // ─── Main live feed ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 

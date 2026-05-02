@@ -132,15 +132,17 @@ async function fetchAdminMatchesWithOdds() {
   const adapted = (data ?? []).map(adaptAdminMatch);
 
   const withOdds = await Promise.all(
-    adapted.map(async (m) => {
-      try {
-        const bundle = await adminMatchesApi.oddsAll(m.id);
-        // bundle shape: { match_result: [{selection, odd}, ...], half_time: [...], ... }
-        return { ...m, odds: bundle?.match_result ?? null };
-      } catch {
-        return m; // show card without odds rather than drop it entirely
-      }
-    })
+    adapted
+      .filter((m) => m.status !== 'FINISHED')
+      .map(async (m) => {
+        try {
+          const bundle = await adminMatchesApi.oddsAll(m.id);
+          // bundle shape: { match_result: [{selection, odd}, ...], half_time: [...], ... }
+          return { ...m, odds: bundle?.match_result ?? null };
+        } catch {
+          return m; // show card without odds rather than drop it entirely
+        }
+      })
   );
 
   return withOdds;
@@ -526,9 +528,7 @@ export default function Home() {
         const withOdds = await fetchAdminMatchesWithOdds();
 
         if (!cancelled) {
-          const active   = withOdds.filter((m) => m.status !== 'FINISHED');
-          const finished = withOdds.filter((m) => m.status === 'FINISHED');
-          setForYouMatches([...active, ...finished].slice(0, 12));
+          setForYouMatches(withOdds.slice(0, 12));
         }
       } catch (err) {
         console.error('[ForYou] failed to load admin matches:', err);
@@ -543,9 +543,7 @@ export default function Home() {
       try {
         const withOdds = await fetchAdminMatchesWithOdds();
         if (!cancelled) {
-          const active   = withOdds.filter((m) => m.status !== 'FINISHED');
-          const finished = withOdds.filter((m) => m.status === 'FINISHED');
-          setForYouMatches([...active, ...finished].slice(0, 12));
+          setForYouMatches(withOdds.slice(0, 12));
         }
       } catch { /* silent */ }
     }, 30_000);
