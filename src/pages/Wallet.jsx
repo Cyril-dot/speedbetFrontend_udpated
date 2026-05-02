@@ -14,9 +14,37 @@ const TX_META = {
   VIP_MEMBERSHIP: { label: 'VIP Membership', color: '#E8003D' },
 };
 
-const MIN_DEPOSIT       = { GHS: 350,      NGN: 50000, USD: 200  };
-const MIN_DEPOSIT_LABEL = { GHS: 'GHS 350', NGN: '₦50,000', USD: '$200' };
-const CURRENCY_SYMBOL   = { GHS: '₵',      NGN: '₦',   USD: '$'  };
+// ── Currency derived from user.country (UserDto.country) ──────────────────
+// Ghana  → GHS  |  Nigeria → NGN  |  Everything else → USD
+// This mapping is the single source of truth. The wallet's own
+// wallet.currency is used as a fallback if the user object is absent.
+const COUNTRY_TO_CURRENCY = {
+  GH: 'GHS', GHANA: 'GHS',
+  NG: 'NGN', NIGERIA: 'NGN',
+};
+
+/**
+ * Resolve the active currency for a user.
+ * Priority: user.country → wallet.currency → store.currency → 'GHS'
+ */
+function resolveCurrency(user, wallet, storeCurrency) {
+  if (user?.country) {
+    const key = user.country.trim().toUpperCase();
+    const mapped = COUNTRY_TO_CURRENCY[key];
+    if (mapped) return mapped;
+    // Any country that is not GH / NG gets USD
+    return 'USD';
+  }
+  return wallet?.currency ?? storeCurrency ?? 'GHS';
+}
+
+const MIN_DEPOSIT       = { GHS: 350,      NGN: 50000,  USD: 200  };
+const MIN_DEPOSIT_LABEL = { GHS: '₵350',   NGN: '₦50,000', USD: '$200' };
+const CURRENCY_SYMBOL   = { GHS: '₵',      NGN: '₦',    USD: '$'  };
+
+// ── Withdrawal minimums (updated) ─────────────────────────────────────────
+const MIN_WITHDRAW       = { GHS: 10000,      NGN: 500000,     USD: 2000     };
+const MIN_WITHDRAW_LABEL = { GHS: '₵10,000',  NGN: '₦500,000', USD: '$2,000' };
 
 const QUICK_AMOUNTS = {
   GHS: [350,   500,    1000,   2000  ],
@@ -30,9 +58,15 @@ export default function Wallet() {
   const fetchWallet    = useStore((s) => s.fetchWallet);
   const withdraw       = useStore((s) => s.withdraw);
   const pushToast      = useStore((s) => s.pushToast);
-
   const storeCurrency  = useStore((s) => s.currency);
-  const currency       = wallet?.currency ?? storeCurrency ?? 'GHS';
+
+  // ── Currency is resolved from UserDto.country (from /api/users/me) ──────
+  // UserDto shape: { id, email, firstName, lastName, phone, country, role, ... }
+  // user.country is a string such as "GH", "NG", "US", "GB", etc.
+  // Ghanaian users  → GHS
+  // Nigerian users  → NGN
+  // Everyone else   → USD
+  const currency = resolveCurrency(user, wallet, storeCurrency);
 
   const [loading,        setLoading]        = useState(false);
   const [showDeposit,    setShowDeposit]    = useState(false);
@@ -43,27 +77,25 @@ export default function Wallet() {
   const [accountNumber,  setAccountNumber]  = useState('');
   const [accountName,    setAccountName]    = useState('');
 
-  // ── Fetch wallet on mount ──
+  // ── Fetch wallet on mount ──────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     fetchWallet().finally(() => setLoading(false));
   }, [user]);
 
-  // ── Poll after returning from Paystack ──
+  // ── Poll after returning from Paystack ────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('payment') === 'success') {
       pushToast({ variant: 'info', title: 'Payment received', message: 'Confirming your deposit...' });
-      // Poll at 2s and 5s to catch the webhook credit
       const t1 = setTimeout(() => fetchWallet(), 2000);
       const t2 = setTimeout(() => {
         fetchWallet().then(() => {
           pushToast({ variant: 'win', title: 'Wallet updated', message: 'Your deposit has been credited.' });
         });
       }, 5000);
-      // Clean the query param from the URL without reloading
       window.history.replaceState({}, '', window.location.pathname);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
@@ -86,13 +118,12 @@ export default function Wallet() {
 
   const minDeposit      = MIN_DEPOSIT[currency]       ?? MIN_DEPOSIT.GHS;
   const minDepositLabel = MIN_DEPOSIT_LABEL[currency] ?? MIN_DEPOSIT_LABEL.GHS;
+  const minWithdraw      = MIN_WITHDRAW[currency]       ?? MIN_WITHDRAW.GHS;
+  const minWithdrawLabel = MIN_WITHDRAW_LABEL[currency] ?? MIN_WITHDRAW_LABEL.GHS;
   const quickAmounts    = QUICK_AMOUNTS[currency]     ?? QUICK_AMOUNTS.GHS;
   const symbol          = CURRENCY_SYMBOL[currency]   ?? '₵';
 
-  // ── Deposit: initialise Paystack and redirect ──
-  // FIX: api.ts req() already unwraps json.data, so authorization_url lands
-  // directly on res (or res.data if the store wraps it once more).
-  // Check all nesting levels; never show a false-positive "follow instructions" toast.
+  // ── Deposit: initialise Paystack and redirect ──────────────────────────
   const submitDeposit = async () => {
     const a = +amount;
     if (!a || a < minDeposit) {
@@ -104,7 +135,6 @@ export default function Wallet() {
       const res = await useStore.getState().deposit({ amount: a, currency });
       if (res?.error) throw new Error(res.error);
 
-      // Confirmed shape: { ok, data: { status, message, data: { authorization_url } } }
       const url =
         res?.data?.data?.authorization_url ??
         res?.data?.data?.authorizationUrl  ??
@@ -127,11 +157,11 @@ export default function Wallet() {
     }
   };
 
-  // ── Withdraw ──
+  // ── Withdraw ──────────────────────────────────────────────────────────
   const submitWithdraw = async () => {
     const a = +withdrawAmount;
-    if (!a || a < 10) {
-      pushToast({ variant: 'error', title: `Min withdrawal ${symbol}10` });
+    if (!a || a < minWithdraw) {
+      pushToast({ variant: 'error', title: `Min withdrawal ${minWithdrawLabel}` });
       return;
     }
     if (a > balance) {
@@ -371,7 +401,7 @@ export default function Wallet() {
             </div>
           </div>
           <p className="text-white-60 text-xs">
-            Min withdrawal: {symbol}10 · Processing time: up to 24 hours.
+            Min withdrawal: {minWithdrawLabel} · Processing time: up to 24 hours.
           </p>
           <Button variant="primary" size="lg" className="w-full" onClick={submitWithdraw}>
             WITHDRAW {withdrawAmount ? fmtMoneyWithCode(+withdrawAmount, currency) : '—'}

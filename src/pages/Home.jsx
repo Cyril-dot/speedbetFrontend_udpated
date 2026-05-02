@@ -242,18 +242,15 @@ function extractOdds(odds, homeTeam, awayTeam) {
   return { home, draw, away };
 }
 
-// ─── For You match card ───────────────────────────────────────────────────────
+// ─── For You match card — mobile-first ───────────────────────────────────────
 function ForYouMatchCard({ match, onHide }) {
   const navigate  = useNavigate();
   const addToSlip = useStore((s) => s.addToSlip);
   const slip      = useStore((s) => s.slip);
   const [hovered, setHovered] = useState(false);
-  const [visible, setVisible] = useState(true);
   const timezone = useTimezone();
 
-  const isLive     = match.status === 'LIVE';
-  const isFinished = match.status === 'FINISHED';
-
+  const isLive    = match.status === 'LIVE';
   const homeTeam  = match?.home?.name ?? '';
   const awayTeam  = match?.away?.name ?? '';
   const scoreHome = match?.score?.home ?? null;
@@ -278,17 +275,6 @@ function ForYouMatchCard({ match, onHide }) {
 
   const kickoffTime = formatKickoff(match?.kickoff, timezone);
 
-  useEffect(() => {
-    if (!isFinished) return;
-    const timer = setTimeout(() => {
-      setVisible(false);
-      onHide?.(match.id);
-    }, 5 * 60 * 1000);
-    return () => clearTimeout(timer);
-  }, [isFinished, match.id, onHide]);
-
-  if (!visible) return null;
-
   return (
     <motion.div
       onHoverStart={() => setHovered(true)}
@@ -297,19 +283,18 @@ function ForYouMatchCard({ match, onHide }) {
       style={{
         position: 'relative',
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'column',
         cursor: 'pointer',
         overflow: 'hidden',
-        borderRadius: 10,
+        borderRadius: 12,
         border: isLive
           ? '1.5px solid rgba(255,71,87,0.4)'
           : '1.5px solid rgba(255,255,255,0.07)',
         background: hovered ? 'rgba(99,210,255,0.03)' : 'var(--surface-0)',
         transition: 'background 0.18s ease',
-        padding: '10px 14px',
-        minWidth: 260,
+        // Fluid width: fills ~80vw on mobile, caps at 260px on desktop
+        width: 'clamp(200px, 78vw, 260px)',
         flex: '0 0 auto',
-        gap: 0,
       }}
     >
       {/* Live accent bar */}
@@ -324,102 +309,116 @@ function ForYouMatchCard({ match, onHide }) {
         />
       )}
 
-      {/* Time / status column */}
+      {/* Top row: league + status badge */}
       <div style={{
-        width: 52, flexShrink: 0,
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 3,
-        paddingRight: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '9px 12px 0',
+        gap: 6,
       }}>
+        <span style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+          color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+        }}>
+          {match.league || 'SpeedBet Special'}
+        </span>
+
+        {/* Status pill */}
         {isLive ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <motion.div
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+            fontSize: 9, fontWeight: 800, color: '#ff4757',
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+          }}>
+            <motion.span
               animate={{ opacity: [1, 0.3, 1], scale: [1, 1.2, 1] }}
               transition={{ duration: 1.2, repeat: Infinity }}
-              style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: '#ff4757',
-                boxShadow: '0 0 10px #ff4757aa',
-              }}
+              style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff4757', display: 'inline-block', boxShadow: '0 0 6px #ff4757aa' }}
             />
-            <span style={{
-              fontSize: 11, fontWeight: 800, color: '#ff4757',
-              letterSpacing: '0.03em', lineHeight: 1,
-            }}>{minute ? `${minute}'` : 'LIVE'}</span>
-          </div>
-        ) : isFinished ? (
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.06em' }}>FT</span>
+            {minute ? `${minute}'` : 'LIVE'}
+          </span>
         ) : kickoffTime ? (
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>{kickoffTime}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.4)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+            {kickoffTime}
+          </span>
         ) : (
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#63d2ff', letterSpacing: '0.06em' }}>SOON</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#63d2ff', flexShrink: 0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            SOON
+          </span>
         )}
       </div>
 
-      {/* Thin divider */}
-      <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.05)', marginRight: 14, flexShrink: 0 }} />
-
-      {/* Teams */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <div style={{
-          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
-          color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase',
-          marginBottom: 2,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {match.league || 'SpeedBet Special'}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <span style={{
-            fontSize: 13, fontWeight: 600,
-            color: hasScore && scoreHome > scoreAway ? '#ffffff' : 'rgba(255,255,255,0.82)',
-            letterSpacing: '-0.01em', lineHeight: 1.25,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-          }}>{homeTeam || 'Home Team'}</span>
-          {hasScore && (
+      {/* Teams + scores */}
+      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {[
+          { name: homeTeam, score: scoreHome, winning: hasScore && scoreHome > scoreAway },
+          { name: awayTeam, score: scoreAway, winning: hasScore && scoreAway > scoreHome },
+        ].map(({ name, score, winning }, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
             <span style={{
-              fontSize: 15, fontWeight: 900,
-              color: isLive ? '#ff4757' : 'rgba(255,255,255,0.9)',
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '0.04em', flexShrink: 0,
-            }}>{scoreHome}</span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <span style={{
-            fontSize: 13, fontWeight: 600,
-            color: hasScore && scoreAway > scoreHome ? '#ffffff' : 'rgba(255,255,255,0.82)',
-            letterSpacing: '-0.01em', lineHeight: 1.25,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-          }}>{awayTeam || 'Away Team'}</span>
-          {hasScore && (
-            <span style={{
-              fontSize: 15, fontWeight: 900,
-              color: isLive ? '#ff4757' : 'rgba(255,255,255,0.9)',
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '0.04em', flexShrink: 0,
-            }}>{scoreAway}</span>
-          )}
-        </div>
+              fontSize: 13, fontWeight: winning ? 700 : 500,
+              color: winning ? '#ffffff' : 'rgba(255,255,255,0.82)',
+              letterSpacing: '-0.01em', lineHeight: 1.25,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+            }}>{name || '—'}</span>
+            {hasScore && (
+              <span style={{
+                fontSize: 15, fontWeight: 900, flexShrink: 0,
+                color: isLive ? '#ff4757' : 'rgba(255,255,255,0.9)',
+                fontVariantNumeric: 'tabular-nums', letterSpacing: '0.04em',
+              }}>{score}</span>
+            )}
+          </div>
+        ))}
       </div>
 
-      {/* Odds buttons or FT label */}
-      {!isFinished ? (
-        <div style={{ display: 'flex', gap: 3, marginLeft: 10, flexShrink: 0, alignItems: 'center' }}>
-          <OddsBtn label="1" value={oHome} selected={isSelected('HOME')} onClick={(e) => handleOdds(e, 'HOME', oHome)} />
-          <OddsBtn label="X" value={oDraw} selected={isSelected('DRAW')} onClick={(e) => handleOdds(e, 'DRAW', oDraw)} />
-          <OddsBtn label="2" value={oAway} selected={isSelected('AWAY')} onClick={(e) => handleOdds(e, 'AWAY', oAway)} />
-        </div>
-      ) : (
-        <div style={{
-          marginLeft: 14, flexShrink: 0,
-          fontSize: 10, fontWeight: 700,
-          color: 'rgba(255,255,255,0.18)',
-          letterSpacing: '0.08em', textTransform: 'uppercase',
-        }}>Full time</div>
-      )}
+      {/* Odds row — full width, three equal buttons */}
+      <div style={{
+        display: 'flex', gap: 4, padding: '0 10px 10px',
+      }}>
+        {[
+          { label: '1', value: oHome, sel: 'HOME' },
+          { label: 'X', value: oDraw, sel: 'DRAW' },
+          { label: '2', value: oAway, sel: 'AWAY' },
+        ].map(({ label, value, sel }) => {
+          const has      = value && value !== '—';
+          const selected = isSelected(sel);
+          return (
+            <motion.button
+              key={sel}
+              whileTap={{ scale: 0.93 }}
+              onClick={has ? (e) => handleOdds(e, sel, value) : undefined}
+              style={{
+                flex: 1,
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 1, padding: '7px 0',
+                borderRadius: 8,
+                border: selected
+                  ? '1.5px solid rgba(99,210,255,0.7)'
+                  : '1.5px solid rgba(255,255,255,0.08)',
+                background: selected
+                  ? 'linear-gradient(135deg, rgba(99,210,255,0.25), rgba(56,145,255,0.2))'
+                  : 'rgba(255,255,255,0.05)',
+                cursor: has ? 'pointer' : 'default',
+                transition: 'all 0.18s cubic-bezier(.4,0,.2,1)',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              <span style={{
+                fontSize: 9, fontWeight: 700, lineHeight: 1,
+                color: selected ? 'rgba(99,210,255,0.8)' : 'rgba(255,255,255,0.35)',
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}>{label}</span>
+              <span style={{
+                fontSize: 13, fontWeight: 800, lineHeight: 1.2,
+                fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em',
+                color: has ? (selected ? '#63d2ff' : '#fff') : 'rgba(255,255,255,0.18)',
+              }}>{has ? value : '—'}</span>
+            </motion.button>
+          );
+        })}
+      </div>
     </motion.div>
   );
 }
@@ -449,19 +448,26 @@ function ForYouSection({ matches, loading, onHideMatch }) {
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto', paddingBottom: 16 }} className="no-scrollbar">
+      {/* Scroll container — no padding tricks so first card bleeds to edge on mobile */}
+      <div style={{ overflowX: 'auto', paddingBottom: 16, WebkitOverflowScrolling: 'touch' }} className="no-scrollbar">
         <div style={{
-          display: 'flex', gap: 10,
+          display: 'flex',
+          gap: 10,
+          // On mobile: 16px left padding so first card starts nicely
+          // On desktop: centres inside max-w-7xl like the rest of the page
           paddingLeft: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
           paddingRight: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
-          paddingTop: 4, minWidth: 'max-content',
+          paddingTop: 4,
+          // Do NOT set minWidth: max-content — let cards be fluid so the
+          // scroll container knows its natural width from card widths (clamp)
         }}>
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse" style={{
-                  width: 260, height: 110, borderRadius: 10,
+                  width: 'clamp(200px, 78vw, 260px)',
+                  height: 130, borderRadius: 12, flexShrink: 0,
                   background: 'var(--surface-0)',
-                  border: '1.5px solid rgba(255,255,255,0.05)', flexShrink: 0,
+                  border: '1.5px solid rgba(255,255,255,0.05)',
                 }} />
               ))
             : matches.map((m) => (
