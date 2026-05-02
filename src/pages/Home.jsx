@@ -99,20 +99,6 @@ function adaptAdminMatch(m) {
   const homeName = m.homeTeam ?? m.home?.name ?? '';
   const awayName = m.awayTeam ?? m.away?.name ?? '';
 
-  const rawOdds =
-    m.odds ??
-    m.markets?.[0]?.outcomes ??
-    m.markets?.[0]?.odds ??
-    null;
-
-  // ── LOGGING: full raw admin match shape ──
-  console.group(`[ForYou] Admin match: ${homeName} vs ${awayName}`);
-  console.log('raw match object:', JSON.parse(JSON.stringify(m)));
-  console.log('odds field (m.odds):', m.odds);
-  console.log('markets field (m.markets):', m.markets);
-  console.log('resolved rawOdds:', rawOdds);
-  console.groupEnd();
-
   return {
     id: m.id,
     status: m.status ?? 'SCHEDULED',
@@ -122,7 +108,7 @@ function adaptAdminMatch(m) {
     score: { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
     minute: m.minutePlayed ?? m.metadata?.current_minute ?? null,
     kickoff: m.kickoffAt ?? null,
-    odds: rawOdds,
+    odds: null, // odds fetched separately via oddsAll()
   };
 }
 
@@ -138,6 +124,26 @@ export function getFallbackCarouselMatches() {
     { id: 'fallback-4', status: 'UPCOMING', league: 'Serie A', home: { name: 'Inter Milan', logo: null, short: 'INT', color: '#0068A8' }, away: { name: 'Juventus', logo: null, short: 'JUV', color: '#000000' }, score: { home: null, away: null }, minute: null, kickoff: null, odds: null },
     { id: 'fallback-5', status: 'UPCOMING', league: 'Ligue 1', home: { name: 'Paris Saint-Germain', logo: null, short: 'PSG', color: '#004170' }, away: { name: 'Marseille', logo: null, short: 'OM', color: '#2faee0' }, score: { home: null, away: null }, minute: null, kickoff: null, odds: null },
   ];
+}
+
+// ─── Helper: fetch admin matches list then enrich each with odds ──────────────
+async function fetchAdminMatchesWithOdds() {
+  const data = await adminMatchesApi.all();
+  const adapted = (data ?? []).map(adaptAdminMatch);
+
+  const withOdds = await Promise.all(
+    adapted.map(async (m) => {
+      try {
+        const bundle = await adminMatchesApi.oddsAll(m.id);
+        // bundle shape: { match_result: [{selection, odd}, ...], half_time: [...], ... }
+        return { ...m, odds: bundle?.match_result ?? null };
+      } catch {
+        return m; // show card without odds rather than drop it entirely
+      }
+    })
+  );
+
+  return withOdds;
 }
 
 function MatchRowSkeleton() {
@@ -205,15 +211,11 @@ function OddsBtn({ label, value, selected, onClick }) {
 function extractOdds(odds, homeTeam, awayTeam) {
   if (!odds) return { home: null, draw: null, away: null };
 
-  // ── LOGGING ──
-  console.log('[extractOdds] raw odds received:', odds, '| type:', Array.isArray(odds) ? 'array' : typeof odds);
-
   // Flat object: { home, draw, away } or { homeOdds, drawOdds, awayOdds } or { '1', 'x', '2' }
   if (!Array.isArray(odds)) {
     const h = odds.home ?? odds.homeOdds ?? odds['1'] ?? odds.home_win ?? null;
     const d = odds.draw ?? odds.drawOdds ?? odds['x'] ?? odds['X'] ?? odds.draw_win ?? null;
     const a = odds.away ?? odds.awayOdds ?? odds['2'] ?? odds.away_win ?? null;
-    console.log('[extractOdds] flat object → h:', h, 'd:', d, 'a:', a);
     return {
       home: h ? parseFloat(h).toFixed(2) : null,
       draw: d ? parseFloat(d).toFixed(2) : null,
@@ -222,6 +224,7 @@ function extractOdds(odds, homeTeam, awayTeam) {
   }
 
   // Array: [{ selection: '1', odd: '1.85' }, ...]
+  // This is what match_result from oddsAll() returns.
   let home = null, draw = null, away = null;
   const hn = (homeTeam || '').toLowerCase().split(' ')[0];
   const an = (awayTeam || '').toLowerCase().split(' ')[0];
@@ -234,11 +237,10 @@ function extractOdds(odds, homeTeam, awayTeam) {
     else if (!away && (sel === '2' || sel === 'away' || (an && sel.includes(an)))) away = parseFloat(val).toFixed(2);
     if (home && draw && away) break;
   }
-  console.log('[extractOdds] array → h:', home, 'd:', draw, 'a:', away);
   return { home, draw, away };
 }
 
-// ─── For You match card — mirrors MatchCard from Shared.jsx ───────────────────
+// ─── For You match card ───────────────────────────────────────────────────────
 function ForYouMatchCard({ match, onHide }) {
   const navigate  = useNavigate();
   const addToSlip = useStore((s) => s.addToSlip);
@@ -515,31 +517,17 @@ export default function Home() {
     setHiddenForYouIds((prev) => new Set([...prev, id]));
   }, []);
 
+  // ─── For You: fetch admin matches then enrich with odds ──────────────────
   useEffect(() => {
     let cancelled = false;
 
     async function loadForYou() {
       try {
-        const data = await adminMatchesApi.all();
-
-        // ── LOGGING: raw API response ──
-        console.group('[ForYou] Raw adminMatchesApi.all() response');
-        console.log('total items:', data?.length);
-        if (data?.[0]) {
-          console.log('first item (full):', JSON.parse(JSON.stringify(data[0])));
-          console.log('first item keys:', Object.keys(data[0]));
-          console.log('first item odds:', data[0].odds);
-          console.log('first item markets:', data[0].markets);
-        }
-        console.groupEnd();
+        const withOdds = await fetchAdminMatchesWithOdds();
 
         if (!cancelled) {
-          const adapted  = (data ?? []).map(adaptAdminMatch);
-          const active   = adapted.filter((m) => m.status !== 'FINISHED');
-          const finished = adapted.filter((m) => m.status === 'FINISHED');
-
-          console.log('[ForYou] adapted matches (first):', adapted[0]);
-
+          const active   = withOdds.filter((m) => m.status !== 'FINISHED');
+          const finished = withOdds.filter((m) => m.status === 'FINISHED');
           setForYouMatches([...active, ...finished].slice(0, 12));
         }
       } catch (err) {
@@ -553,11 +541,10 @@ export default function Home() {
 
     const iv = setInterval(async () => {
       try {
-        const data = await adminMatchesApi.all();
+        const withOdds = await fetchAdminMatchesWithOdds();
         if (!cancelled) {
-          const adapted  = (data ?? []).map(adaptAdminMatch);
-          const active   = adapted.filter((m) => m.status !== 'FINISHED');
-          const finished = adapted.filter((m) => m.status === 'FINISHED');
+          const active   = withOdds.filter((m) => m.status !== 'FINISHED');
+          const finished = withOdds.filter((m) => m.status === 'FINISHED');
           setForYouMatches([...active, ...finished].slice(0, 12));
         }
       } catch { /* silent */ }
@@ -566,6 +553,7 @@ export default function Home() {
     return () => { cancelled = true; clearInterval(iv); };
   }, []);
 
+  // ─── Main match feed ─────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
