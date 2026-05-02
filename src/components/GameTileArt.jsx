@@ -360,6 +360,7 @@ export const GAME_TILE_ART = {
   'sporty-jet': SportyJetArt,
   'ball-crush': BallCrushArt,
   'spin-bottle': SpinBottleArt,
+  'sporty-kick': BallCrushArt,
   'mines': MinesArt,
   'magic-ball': MagicBallArt,
   'spaceman': SpacemanTileArt,

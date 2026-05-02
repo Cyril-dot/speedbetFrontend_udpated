@@ -40,7 +40,7 @@ const arcadeGames = [
     },
   },
   {
-    slug: 'ball-crush',
+    slug: 'sporty-kick',
     name: 'Ball Crush',
     family: 'skill',
     max_payout: '500x',
@@ -93,24 +93,6 @@ const arcadeGames = [
       tip: 'Start with fewer mines to learn the game mechanics.',
     },
   },
-  // {
-  //   slug: 'magic-ball',
-  //   name: 'Magic Ball',
-  //   family: 'classic',
-  //   max_payout: '250x',
-  //   desc: 'Mystical fortune-telling ball that reveals your winning multiplier.',
-  //   tagline: 'The ball knows your fortune',
-  //   instructions: {
-  //     objective: 'Shake the magic ball and reveal your fortune/multiplier.',
-  //     steps: [
-  //       'Place your bet',
-  //       'Shake the magic ball',
-  //       'Watch as your fortune is revealed',
-  //       'Collect your multiplied winnings',
-  //     ],
-  //     tip: 'The ball tends to be more generous after a series of low numbers.',
-  //   },
-  // },
   {
     slug: 'virtual-football',
     name: 'Virtual Football',
@@ -129,42 +111,6 @@ const arcadeGames = [
       tip: 'Check the form guide before betting - some teams have better stats!',
     },
   },
-  // {
-  //   slug: 'lucky-slots',
-  //   name: 'Lucky Slots',
-  //   family: 'slots',
-  //   max_payout: '5000x',
-  //   desc: 'Classic slot machine with lucky sevens, bars, and massive jackpots.',
-  //   tagline: 'Spin to win the jackpot',
-  //   instructions: {
-  //     objective: 'Match symbols on the paylines to win multipliers and jackpots.',
-  //     steps: [
-  //       'Choose your bet per line',
-  //       'Spin the reels',
-  //       'Match 3+ symbols on active paylines',
-  //       'Collect your winnings or spin again',
-  //     ],
-  //     tip: 'The lucky 7s pay the most - keep spinning for the jackpot!',
-  //   },
-  // },
-  // {
-  //   slug: 'fruit-frenzy',
-  //   name: 'Fruit Frenzy',
-  //   family: 'slots',
-  //   max_payout: '2500x',
-  //   desc: 'Colorful fruit-themed slot game with exciting bonus rounds.',
-  //   tagline: 'Fruity fun with big wins',
-  //   instructions: {
-  //     objective: 'Match fruit symbols and trigger bonus rounds for big wins.',
-  //     steps: [
-  //       'Set your bet amount',
-  //       'Spin the fruity reels',
-  //       'Match fruits for line wins',
-  //       'Trigger bonus rounds for free spins',
-  //     ],
-  //     tip: 'The scatter symbols unlock free spins - that\'s where the big wins hide!',
-  //   },
-  // },
 ];
 
 import { GAME_TILE_ART } from '../../components/GameTileArt';
