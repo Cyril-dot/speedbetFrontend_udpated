@@ -1,6 +1,6 @@
 // ============================================================
 // SpeedBet API Service
-// Base URL: http://localhost:8080
+// Base URL: https://speedbetbackend-production.up.railway.app
 // All authenticated endpoints send Bearer token from localStorage
 // ============================================================
 
@@ -46,7 +46,7 @@ async function req<T>(
     throw new Error(message);
   }
   const json = await res.json();
-  // FIX: some endpoints return { data: T }, others return T directly.
+  // Some endpoints return { data: T }, others return T directly.
   // Prefer json.data when present, otherwise return the root object.
   return (json?.data !== undefined ? json.data : json) as T;
 }
@@ -83,6 +83,8 @@ export interface Match {
   metadata: Record<string, unknown> | null;
   settledAt: string | null;
   createdAt: string;
+  minutePlayed?: number | null;
+  createdByAdminId?: string | null;
 }
 
 export interface Odds {
@@ -296,15 +298,59 @@ export type AllOddsBundle = Record<string, Array<{
   market: string;
   selection: string;
   odd: string | number;
+  handicap?: string | number;
 }>>;
 
 /**
+ * Request payload for creating an admin match.
+ * Mirrors AdminMatchRequest on the backend.
+ * Odds are auto-generated — never supply them here.
+ */
+export interface AdminMatchRequest {
+  homeTeam: string;
+  awayTeam: string;
+  league?: string;
+  sport?: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  leagueLogo?: string;
+  /** ISO-8601 UTC string, e.g. "2025-06-01T15:00:00Z". Defaults to now if omitted. */
+  kickoffAt?: string;
+  /** SCHEDULED | LIVE | HALF_TIME | SECOND_HALF. Defaults to SCHEDULED. */
+  status?: string;
+  featured?: boolean;
+}
+
+/**
+ * Request payload for updating an admin match score.
+ * Mirrors AdminScoreUpdateRequest on the backend.
+ * Only allowed when status is LIVE | HALF_TIME | SECOND_HALF.
+ */
+export interface AdminScoreUpdateRequest {
+  scoreHome: number;
+  scoreAway: number;
+  minutePlayed?: number;
+}
+
+/**
+ * Request payload for transitioning an admin match status.
+ * Mirrors AdminStatusUpdateRequest on the backend.
+ *
+ * Legal transitions:
+ *   SCHEDULED   → LIVE
+ *   LIVE        → HALF_TIME | FINISHED
+ *   HALF_TIME   → SECOND_HALF
+ *   SECOND_HALF → FINISHED
+ *
+ * FINISHED is terminal — no further transitions permitted.
+ */
+export interface AdminStatusUpdateRequest {
+  status: "SCHEDULED" | "LIVE" | "HALF_TIME" | "SECOND_HALF" | "FINISHED";
+}
+
+/**
  * Bundle returned by /api/public/matches.
- * FIX: previously each property (today, live, upcoming …) made a separate
- * network call to the same endpoint and destructured a single key, wasting
- * 4 identical requests. Now callers fetch once via matches.all() and pick
- * the slice they need, or use the individual helpers which share one call
- * via a module-level cache (30s TTL).
+ * All slice helpers share one cached network call (30s TTL).
  */
 export interface PublicMatchesBundle {
   today: Match[];
@@ -374,8 +420,6 @@ export const auth = {
 
 // ============================================================
 // MATCHES — Public (no auth)
-// FIX: all slice helpers now share one cached network call instead
-// of each hitting /api/public/matches independently.
 // ============================================================
 export const matches = {
   /** Fetch the full bundle once; result is cached for 30 s. */
@@ -399,6 +443,46 @@ export const matches = {
     ),
   standings: (leaguePath: string) =>
     get<Record<string, unknown>[]>(`/api/public/standings/${leaguePath}`),
+};
+
+// ============================================================
+// ADMIN MATCHES — Public read (no auth required)
+// Served by AdminMatchPublicController under /api/public/admin-matches.
+// Reads directly from the odds table so values are identical to what
+// BetService validates against — no live-generator drift.
+// ============================================================
+export const adminMatches = {
+  /** All admin-created matches across all admins, sorted newest kickoff first. */
+  all: () =>
+    get<Match[]>("/api/public/admin-matches"),
+
+  /** Admin matches currently LIVE. */
+  live: () =>
+    get<Match[]>("/api/public/admin-matches/live"),
+
+  /** Admin matches that are SCHEDULED (upcoming, not yet live). */
+  upcoming: () =>
+    get<Match[]>("/api/public/admin-matches/upcoming"),
+
+  /** Single admin match by UUID. Returns 404 if not ADMIN_CREATED source. */
+  byId: (id: string) =>
+    get<Match>(`/api/public/admin-matches/${id}`),
+
+  /**
+   * Raw persisted Odds list for one admin match.
+   * Same shape as GET /api/matches/{id}/odds.
+   * Includes 1X2, half_time, asian_handicap, correct_score rows.
+   */
+  odds: (id: string) =>
+    get<Odds[]>(`/api/public/admin-matches/${id}/odds`),
+
+  /**
+   * Odds grouped by market — the shape the betting UI expects.
+   * Response keys: match_result | half_time | asian_handicap | correct_score
+   * Values are identical to what BetService.resolveOdds() reads.
+   */
+  oddsAll: (id: string) =>
+    get<AllOddsBundle>(`/api/public/admin-matches/${id}/odds/all`),
 };
 
 // ============================================================
@@ -473,8 +557,7 @@ export const predictions = {
 
 // ============================================================
 // BOOKING CODES
-// FIX: /api/booking/redeem has no @PreAuthorize — auth flag
-// changed to false so we don't unnecessarily attach a Bearer token.
+// /api/booking/redeem has no @PreAuthorize — auth flag is false.
 // ============================================================
 export const booking = {
   redeem: (code: string) =>
@@ -560,6 +643,60 @@ export const admin = {
     post<void>(`/api/admin/crash/schedule/${game}/generate`, undefined, true),
   overrideCrash: (id: string, payload: Record<string, unknown>) =>
     patch<GameCrashSchedule>(`/api/admin/crash/schedule/${id}/override`, payload, true),
+
+  // ── Admin Match Management ─────────────────────────────────────────────
+  // Requires ADMIN role (Bearer token). Identity is always resolved from
+  // the token — never pass createdByAdminId in the payload.
+  // Each admin sees only their own matches; 404 is returned for another
+  // admin's match to avoid leaking info across accounts.
+
+  /**
+   * Create a new admin-managed match.
+   * All odds (1X2, half_time, asian_handicap, correct_score) are
+   * auto-generated and persisted immediately — the match is open for
+   * bets the moment it is saved.
+   */
+  createMatch: (payload: AdminMatchRequest) =>
+    post<Match>("/api/admin/matches", payload, true),
+
+  /**
+   * List all matches created by the authenticated admin, newest kickoff first.
+   * External-feed and other admins' matches are never included.
+   */
+  listMyMatches: () =>
+    get<Match[]>("/api/admin/matches", true),
+
+  /**
+   * Get a single match owned by the authenticated admin.
+   * Returns 404 when the match does not exist or belongs to another admin.
+   */
+  getMyMatch: (id: string) =>
+    get<Match>(`/api/admin/matches/${id}`, true),
+
+  /**
+   * Transition the match through the state machine.
+   *
+   * Legal transitions:
+   *   SCHEDULED   → LIVE
+   *   LIVE        → HALF_TIME | FINISHED
+   *   HALF_TIME   → SECOND_HALF
+   *   SECOND_HALF → FINISHED
+   *
+   * FINISHED is terminal. Live odds (1X2 + asian_handicap) are refreshed
+   * on every transition except FINISHED. The HT scoreline is snapshotted
+   * automatically on LIVE → HALF_TIME so half-time bets settle correctly.
+   */
+  updateMatchStatus: (id: string, payload: AdminStatusUpdateRequest) =>
+    patch<Match>(`/api/admin/matches/${id}/status`, payload, true),
+
+  /**
+   * Update the live score of an admin match.
+   * Only allowed when status is LIVE | HALF_TIME | SECOND_HALF.
+   * Triggers an immediate live-odds refresh (1X2 + asian_handicap) so the
+   * DB always reflects the current scoreline.
+   */
+  updateMatchScore: (id: string, payload: AdminScoreUpdateRequest) =>
+    patch<Match>(`/api/admin/matches/${id}/score`, payload, true),
 };
 
 // ============================================================

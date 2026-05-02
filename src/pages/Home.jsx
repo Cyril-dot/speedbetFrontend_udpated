@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { matches as matchesApi } from '../api';
+import { matches as matchesApi, adminMatches as adminMatchesApi } from '../api';
 import { MatchCard, MatchGroup } from '../components/Shared';
 import {
   scrollFadeIn,
@@ -71,16 +71,6 @@ function resolveTeamName(m, side) {
   );
 }
 
-function resolveTeamLogo(m, side) {
-  const isHome = side === 'home';
-  return (
-    (isHome ? m.homeLogo : m.awayLogo) ??
-    (isHome ? m.home?.logo : m.away?.logo) ??
-    (isHome ? m.home_logo : m.away_logo) ??
-    ''
-  );
-}
-
 function isDemoMatch(m) {
   const home = resolveTeamName(m, 'home');
   const away = resolveTeamName(m, 'away');
@@ -123,14 +113,14 @@ function adaptMatch(m) {
     name:  homeName,
     short: (m.home?.short ?? homeName.slice(0, 3)).toUpperCase(),
     color: m.home?.color ?? '#888',
-    logo:  null, // logos removed
+    logo:  null,
   };
 
   const rawAway = {
     name:  awayName,
     short: (m.away?.short ?? awayName.slice(0, 3)).toUpperCase(),
     color: m.away?.color ?? '#888',
-    logo:  null, // logos removed
+    logo:  null,
   };
 
   return {
@@ -142,6 +132,34 @@ function adaptMatch(m) {
     score:   { home: scoreHome, away: scoreAway },
     minute,
     kickoff,
+    odds:    m.odds ?? null,
+  };
+}
+
+// ─── Adapt admin match (different field shape from public admin endpoint) ─────
+function adaptAdminMatch(m) {
+  const homeName = m.homeTeam ?? m.home?.name ?? '';
+  const awayName = m.awayTeam ?? m.away?.name ?? '';
+
+  return {
+    id:      m.id,
+    status:  m.status ?? 'SCHEDULED',
+    league:  m.league ?? 'SpeedBet Special',
+    home: {
+      name:  homeName,
+      short: homeName.slice(0, 3).toUpperCase(),
+      color: '#63d2ff',
+      logo:  m.homeLogo ?? null,
+    },
+    away: {
+      name:  awayName,
+      short: awayName.slice(0, 3).toUpperCase(),
+      color: '#ff4757',
+      logo:  m.awayLogo ?? null,
+    },
+    score:   { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
+    minute:  m.minutePlayed ?? m.metadata?.current_minute ?? null,
+    kickoff: m.kickoffAt ?? null,
     odds:    m.odds ?? null,
   };
 }
@@ -213,6 +231,182 @@ function MatchRowSkeleton() {
   );
 }
 
+// ─── For You match card — admin-curated, special styling ─────────────────────
+function ForYouMatchCard({ match }) {
+  const navigate = useNavigate();
+  const isLive     = match.status === 'LIVE';
+  const isFinished = match.status === 'FINISHED';
+  const hasScore   = match.score?.home != null && match.score?.away != null;
+
+  return (
+    <motion.div
+      whileHover={{ y: -2, scale: 1.01 }}
+      onClick={() => navigate(`/app/match/${match.id}`)}
+      style={{
+        position: 'relative',
+        cursor: 'pointer',
+        borderRadius: 10,
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, rgba(99,210,255,0.08) 0%, rgba(56,145,255,0.04) 100%)',
+        border: isLive
+          ? '1.5px solid rgba(255,71,87,0.5)'
+          : '1.5px solid rgba(99,210,255,0.15)',
+        padding: '12px 14px',
+        minWidth: 220,
+        flex: '0 0 auto',
+        boxShadow: isLive
+          ? '0 0 20px rgba(255,71,87,0.12)'
+          : '0 4px 24px rgba(0,0,0,0.25)',
+        transition: 'box-shadow 0.2s ease',
+      }}
+    >
+      {/* Curated badge */}
+      <div style={{
+        position: 'absolute', top: 8, right: 8,
+        fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
+        color: '#63d2ff', textTransform: 'uppercase',
+        background: 'rgba(99,210,255,0.12)',
+        padding: '2px 6px', borderRadius: 4,
+      }}>
+        {isLive ? '🔴 LIVE' : isFinished ? 'FT' : 'CURATED'}
+      </div>
+
+      {/* League */}
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+        color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
+        marginBottom: 10,
+      }}>
+        {match.league || 'SpeedBet Special'}
+      </div>
+
+      {/* Teams + score */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {[
+          { team: match.home, score: match.score?.home, winning: hasScore && match.score?.home > match.score?.away },
+          { team: match.away, score: match.score?.away, winning: hasScore && match.score?.away > match.score?.home },
+        ].map(({ team, score, winning }, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              {/* Team initials badge */}
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                background: 'linear-gradient(135deg, rgba(99,210,255,0.2), rgba(56,145,255,0.1))',
+                border: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 800, color: '#aaa', letterSpacing: '0.04em',
+              }}>
+                {(team?.short || team?.name?.slice(0, 3) || '?').toUpperCase().slice(0, 3)}
+              </div>
+              <span style={{
+                fontSize: 13, fontWeight: winning ? 700 : 500,
+                color: winning ? '#fff' : 'rgba(255,255,255,0.7)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {team?.name || '—'}
+              </span>
+            </div>
+            {hasScore && (
+              <span style={{
+                fontSize: 16, fontWeight: 900,
+                color: isLive ? '#ff4757' : (winning ? '#fff' : 'rgba(255,255,255,0.6)'),
+                fontVariantNumeric: 'tabular-nums',
+                flexShrink: 0,
+              }}>{score}</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom strip */}
+      {!hasScore && !isFinished && (
+        <div style={{
+          marginTop: 10,
+          paddingTop: 8,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          fontSize: 10, color: 'rgba(255,255,255,0.3)',
+          fontWeight: 600, letterSpacing: '0.04em',
+        }}>
+          Tap to bet →
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── For You horizontal scroll section ───────────────────────────────────────
+function ForYouSection({ matches, loading }) {
+  const navigate = useNavigate();
+
+  if (!loading && matches.length === 0) return null;
+
+  return (
+    <section style={{ background: 'var(--surface-1)', paddingBottom: 0 }}>
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6 pb-2">
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            {/* Kicker */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #63d2ff, #3891ff)',
+                boxShadow: '0 0 8px #63d2ff88',
+              }} />
+              <span style={{
+                fontSize: 10, fontWeight: 800, letterSpacing: '0.12em',
+                textTransform: 'uppercase', color: '#63d2ff',
+              }}>SpeedBet Picks · Curated for you</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl" style={{ margin: 0 }}>For You</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/app/sports')}
+          >
+            See all <ArrowRightIcon size={12} />
+          </Button>
+        </div>
+      </div>
+
+      {/* Horizontal scroll rail */}
+      <div style={{ overflowX: 'auto', paddingBottom: 16 }} className="no-scrollbar">
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            paddingLeft: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
+            paddingRight: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
+            paddingTop: 4,
+            minWidth: 'max-content',
+          }}
+        >
+          {loading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="animate-pulse"
+                  style={{
+                    width: 220, height: 110, borderRadius: 10,
+                    background: 'var(--surface-0)',
+                    border: '1.5px solid rgba(255,255,255,0.05)',
+                    flexShrink: 0,
+                  }}
+                />
+              ))
+            : matches.map((m) => (
+                <ForYouMatchCard key={m.id} match={m} />
+              ))
+          }
+        </div>
+      </div>
+
+      {/* Subtle divider */}
+      <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', marginTop: 4 }} />
+    </section>
+  );
+}
+
 // ─── Group matches by league ──────────────────────────────────────────────────
 function groupByLeague(matches) {
   const map = {};
@@ -248,6 +442,10 @@ export default function Home() {
   const [allMatches,      setAllMatches]      = useState([]);
   const [loading,         setLoading]         = useState(true);
 
+  // Admin-curated "For You" matches
+  const [forYouMatches,   setForYouMatches]   = useState([]);
+  const [forYouLoading,   setForYouLoading]   = useState(true);
+
   const featuredGames = arcadeGames.slice(0, 6);
 
   const liveSectionRef     = useRef(null);
@@ -256,6 +454,49 @@ export default function Home() {
   const quickNavRef        = useRef(null);
   const gameCardRefs       = useRef([]);
 
+  // ── Load admin-curated "For You" matches ──────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForYou() {
+      try {
+        const data = await adminMatchesApi.all();
+        if (!cancelled) {
+          // Show non-finished matches first, then finished, limit to 12
+          const adapted = (data ?? []).map(adaptAdminMatch);
+          const active   = adapted.filter((m) => m.status !== 'FINISHED');
+          const finished = adapted.filter((m) => m.status === 'FINISHED');
+          setForYouMatches([...active, ...finished].slice(0, 12));
+        }
+      } catch (err) {
+        console.error('Home: failed to load admin matches for For You section', err);
+      } finally {
+        if (!cancelled) setForYouLoading(false);
+      }
+    }
+
+    loadForYou();
+
+    // Refresh For You every 30s to catch live score updates
+    const iv = setInterval(async () => {
+      try {
+        const data = await adminMatchesApi.all();
+        if (!cancelled) {
+          const adapted  = (data ?? []).map(adaptAdminMatch);
+          const active   = adapted.filter((m) => m.status !== 'FINISHED');
+          const finished = adapted.filter((m) => m.status === 'FINISHED');
+          setForYouMatches([...active, ...finished].slice(0, 12));
+        }
+      } catch { /* silent */ }
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, []);
+
+  // ── Load main feed matches ────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -374,6 +615,9 @@ export default function Home() {
 
       {/* ═══ HERO CAROUSEL ═══ */}
       <HomeCarousel matches={carouselMatches} />
+
+      {/* ═══ FOR YOU — Admin-curated matches (horizontal scroll) ═══ */}
+      <ForYouSection matches={forYouMatches} loading={forYouLoading} />
 
       {/* ═══ QUICK NAV STRIP ═══ */}
       <section

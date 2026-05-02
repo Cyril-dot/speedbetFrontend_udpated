@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { matches as matchesApi } from '../api';
-import { MatchCard } from '../components/Shared';
+import { useNavigate } from 'react-router-dom';
+import { matches as matchesApi, adminMatches as adminMatchesApi } from '../api';
+import { MatchCard, MatchGroup } from '../components/Shared';
 import { SectionHeader, Badge, EmptyState, Button } from '../components/ui/UIKit';
-import { SearchIcon, CalendarIcon, ChartBarIcon } from '../components/icons';
+import { SearchIcon, CalendarIcon, ChartBarIcon, ArrowRightIcon } from '../components/icons';
 import { CardSkeleton } from '../components/ui/Skeleton';
 
 // ─── Demo / hardcoded matches to suppress ────────────────────────────────────
@@ -21,7 +22,7 @@ function isDemoMatch(m) {
   );
 }
 
-// ─── Adapt raw API entry → normalised match shape (same as Home.jsx) ─────────
+// ─── Adapt raw API entry → normalised match shape ─────────────────────────────
 function adaptMatch(entry) {
   const m = entry.match ?? entry;
   return {
@@ -38,19 +39,258 @@ function adaptMatch(entry) {
   };
 }
 
+// ─── Adapt admin match (public admin endpoint field shape) ────────────────────
+function adaptAdminMatch(m) {
+  const homeName = m.homeTeam ?? m.home?.name ?? '';
+  const awayName = m.awayTeam ?? m.away?.name ?? '';
+  return {
+    id:      m.id,
+    status:  m.status ?? 'SCHEDULED',
+    league:  m.league ?? 'SpeedBet Special',
+    country: null,
+    home: {
+      name:  homeName,
+      short: homeName.slice(0, 3).toUpperCase(),
+      color: '#63d2ff',
+      logo:  m.homeLogo ?? null,
+    },
+    away: {
+      name:  awayName,
+      short: awayName.slice(0, 3).toUpperCase(),
+      color: '#ff4757',
+      logo:  m.awayLogo ?? null,
+    },
+    score:   { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
+    minute:  m.minutePlayed ?? m.metadata?.current_minute ?? null,
+    kickoff: m.kickoffAt ?? null,
+    odds:    m.odds ?? null,
+  };
+}
+
+// ─── For You match card ───────────────────────────────────────────────────────
+function ForYouMatchCard({ match }) {
+  const navigate   = useNavigate();
+  const isLive     = match.status === 'LIVE';
+  const isFinished = match.status === 'FINISHED';
+  const hasScore   = match.score?.home != null && match.score?.away != null;
+
+  return (
+    <motion.div
+      whileHover={{ y: -2, scale: 1.01 }}
+      onClick={() => navigate(`/app/match/${match.id}`)}
+      style={{
+        position: 'relative',
+        cursor: 'pointer',
+        borderRadius: 10,
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, rgba(99,210,255,0.08) 0%, rgba(56,145,255,0.04) 100%)',
+        border: isLive
+          ? '1.5px solid rgba(255,71,87,0.5)'
+          : '1.5px solid rgba(99,210,255,0.15)',
+        padding: '12px 14px',
+        minWidth: 220,
+        flex: '0 0 auto',
+        boxShadow: isLive
+          ? '0 0 20px rgba(255,71,87,0.12)'
+          : '0 4px 24px rgba(0,0,0,0.25)',
+        transition: 'box-shadow 0.2s ease',
+      }}
+    >
+      {/* Badge */}
+      <div style={{
+        position: 'absolute', top: 8, right: 8,
+        fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
+        color: isLive ? '#ff4757' : '#63d2ff',
+        textTransform: 'uppercase',
+        background: isLive ? 'rgba(255,71,87,0.12)' : 'rgba(99,210,255,0.12)',
+        padding: '2px 6px', borderRadius: 4,
+      }}>
+        {isLive ? '🔴 LIVE' : isFinished ? 'FT' : 'CURATED'}
+      </div>
+
+      {/* League */}
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+        color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
+        marginBottom: 10, paddingRight: 56,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {match.league || 'SpeedBet Special'}
+      </div>
+
+      {/* Teams + score */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {[
+          { team: match.home, score: match.score?.home, winning: hasScore && match.score?.home > match.score?.away },
+          { team: match.away, score: match.score?.away, winning: hasScore && match.score?.away > match.score?.home },
+        ].map(({ team, score, winning }, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                background: 'linear-gradient(135deg, rgba(99,210,255,0.2), rgba(56,145,255,0.1))',
+                border: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 800, color: '#aaa', letterSpacing: '0.04em',
+              }}>
+                {(team?.short || team?.name?.slice(0, 3) || '?').toUpperCase().slice(0, 3)}
+              </div>
+              <span style={{
+                fontSize: 13, fontWeight: winning ? 700 : 500,
+                color: winning ? '#fff' : 'rgba(255,255,255,0.7)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {team?.name || '—'}
+              </span>
+            </div>
+            {hasScore && (
+              <span style={{
+                fontSize: 16, fontWeight: 900,
+                color: isLive ? '#ff4757' : (winning ? '#fff' : 'rgba(255,255,255,0.6)'),
+                fontVariantNumeric: 'tabular-nums',
+                flexShrink: 0,
+              }}>{score}</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {!hasScore && !isFinished && (
+        <div style={{
+          marginTop: 10, paddingTop: 8,
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          fontSize: 10, color: 'rgba(255,255,255,0.3)',
+          fontWeight: 600, letterSpacing: '0.04em',
+        }}>
+          Tap to bet →
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── For You horizontal scroll section ───────────────────────────────────────
+function ForYouSection({ matches, loading }) {
+  if (!loading && matches.length === 0) return null;
+
+  return (
+    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 0 }}>
+      {/* Header */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6 pb-2">
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #63d2ff, #3891ff)',
+                boxShadow: '0 0 8px #63d2ff88',
+              }} />
+              <span style={{
+                fontSize: 10, fontWeight: 800, letterSpacing: '0.12em',
+                textTransform: 'uppercase', color: '#63d2ff',
+              }}>SpeedBet Picks · Curated for you</span>
+            </div>
+            <h2 className="text-xl md:text-2xl" style={{ margin: 0 }}>For You</h2>
+          </div>
+          {!loading && matches.length > 0 && (
+            <span style={{
+              fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 600,
+            }}>
+              {matches.length} {matches.length === 1 ? 'match' : 'matches'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Horizontal scroll rail */}
+      <div style={{ overflowX: 'auto', paddingBottom: 18 }} className="no-scrollbar">
+        <div style={{
+          display: 'flex', gap: 10,
+          paddingLeft: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
+          paddingRight: 'max(16px, calc((100vw - 1280px) / 2 + 32px))',
+          paddingTop: 10,
+          minWidth: 'max-content',
+        }}>
+          {loading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="animate-pulse"
+                  style={{
+                    width: 220, height: 110, borderRadius: 10, flexShrink: 0,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1.5px solid rgba(255,255,255,0.05)',
+                  }}
+                />
+              ))
+            : matches.map((m) => (
+                <ForYouMatchCard key={m.id} match={m} />
+              ))
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Sports() {
-  const [status, setStatus] = useState('ALL'); // ALL | LIVE | UPCOMING | FINISHED
+  const [status, setStatus] = useState('ALL');
   const [league, setLeague] = useState('ALL');
   const [q, setQ] = useState('');
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Admin-curated For You
+  const [forYouMatches,  setForYouMatches]  = useState([]);
+  const [forYouLoading,  setForYouLoading]  = useState(true);
+
+  // ── Load For You admin matches ────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForYou() {
+      try {
+        const data = await adminMatchesApi.all();
+        if (!cancelled) {
+          const adapted  = (data ?? []).map(adaptAdminMatch);
+          const active   = adapted.filter((m) => m.status !== 'FINISHED');
+          const finished = adapted.filter((m) => m.status === 'FINISHED');
+          setForYouMatches([...active, ...finished].slice(0, 12));
+        }
+      } catch (err) {
+        console.error('Sports: failed to load admin matches', err);
+      } finally {
+        if (!cancelled) setForYouLoading(false);
+      }
+    }
+
+    loadForYou();
+
+    const iv = setInterval(async () => {
+      try {
+        const data = await adminMatchesApi.all();
+        if (!cancelled) {
+          const adapted  = (data ?? []).map(adaptAdminMatch);
+          const active   = adapted.filter((m) => m.status !== 'FINISHED');
+          const finished = adapted.filter((m) => m.status === 'FINISHED');
+          setForYouMatches([...active, ...finished].slice(0, 12));
+        }
+      } catch { /* silent */ }
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, []);
+
+  // ── Load main feed ────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        // Fetch live+upcoming (with odds) and results in parallel
         const [withOddsData, resultsData] = await Promise.all([
           matchesApi.withOdds(),
           matchesApi.results(),
@@ -60,12 +300,9 @@ export default function Sports() {
           const adaptWithOdds = (arr) =>
             (arr ?? []).map(adaptMatch).filter((m) => !isDemoMatch(m));
 
-          const adaptResults = (arr) =>
-            (arr ?? []).map(adaptMatch).filter((m) => !isDemoMatch(m));
-
           const live     = adaptWithOdds(withOddsData?.live);
           const upcoming = adaptWithOdds(withOddsData?.upcoming);
-          const finished = adaptResults(resultsData);
+          const finished = (resultsData ?? []).map(adaptMatch).filter((m) => !isDemoMatch(m));
 
           setMatches([...live, ...upcoming, ...finished]);
         }
@@ -78,7 +315,6 @@ export default function Sports() {
 
     load();
 
-    // Poll live + upcoming every 30s
     const interval = setInterval(async () => {
       try {
         const data = await matchesApi.withOdds();
@@ -152,6 +388,9 @@ export default function Sports() {
         </div>
       </div>
 
+      {/* ═══ FOR YOU — Admin-curated matches ═══ */}
+      <ForYouSection matches={forYouMatches} loading={forYouLoading} />
+
       {/* Filters */}
       <div className="sticky top-16 z-20 bg-black-950/95 backdrop-blur border-b border-black-700">
         <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex flex-wrap items-center gap-2">
@@ -185,9 +424,7 @@ export default function Sports() {
           >
             <option value="ALL">All Leagues</option>
             {leagues.map((l) => (
-              <option key={l.id} value={l.name}>
-                {l.name}
-              </option>
+              <option key={l.id} value={l.name}>{l.name}</option>
             ))}
           </select>
 
