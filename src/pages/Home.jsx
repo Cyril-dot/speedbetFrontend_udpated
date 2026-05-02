@@ -20,6 +20,9 @@ import WinnersFeed from '../components/WinnersFeed';
 import SponsorMarquee, { TeamMarquee } from '../components/SponsorMarquee';
 import HomeCarousel from '../components/HomeCarousel';
 import { GAME_TILE_ART } from '../components/GameTileArt';
+import { useStore } from '../store';
+import { useTimezone } from '../hooks/useTimezone';
+import { formatKickoff } from '../utils/time';
 
 import {
   resolveHardcodedLogo,
@@ -141,15 +144,105 @@ function MatchRowSkeleton() {
   );
 }
 
-// ─── For You match card — styled like MatchCard ───────────────────────────────
+// ─── Odds button (mirrors Shared.jsx OddsBtn) ─────────────────────────────────
+function OddsBtn({ label, value, selected, onClick }) {
+  const has = value && value !== '—';
+  return (
+    <motion.button
+      whileTap={{ scale: 0.93 }}
+      onClick={has ? onClick : undefined}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        padding: '6px 0',
+        width: 44,
+        borderRadius: 8,
+        border: selected
+          ? '1.5px solid rgba(99,210,255,0.7)'
+          : '1.5px solid rgba(255,255,255,0.08)',
+        background: selected
+          ? 'linear-gradient(135deg, rgba(99,210,255,0.25), rgba(56,145,255,0.2))'
+          : 'rgba(255,255,255,0.05)',
+        cursor: has ? 'pointer' : 'default',
+        transition: 'all 0.18s cubic-bezier(.4,0,.2,1)',
+        position: 'relative',
+        overflow: 'hidden',
+        backdropFilter: 'blur(4px)',
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        fontSize: 9, fontWeight: 700,
+        color: selected ? 'rgba(99,210,255,0.8)' : 'rgba(255,255,255,0.35)',
+        letterSpacing: '0.08em', textTransform: 'uppercase', lineHeight: 1,
+      }}>{label}</span>
+      <span style={{
+        fontSize: 14, fontWeight: 800,
+        color: has ? (selected ? '#63d2ff' : '#fff') : 'rgba(255,255,255,0.18)',
+        lineHeight: 1.2,
+        fontVariantNumeric: 'tabular-nums',
+        letterSpacing: '-0.02em',
+      }}>{has ? value : '—'}</span>
+    </motion.button>
+  );
+}
+
+// ─── Extract odds (mirrors Shared.jsx extractOdds) ────────────────────────────
+function extractOdds(oddsArr, homeTeam, awayTeam) {
+  if (!Array.isArray(oddsArr) || !oddsArr.length) return { home: null, draw: null, away: null };
+  let home = null, draw = null, away = null;
+  const hn = (homeTeam || '').toLowerCase().split(' ')[0];
+  const an = (awayTeam || '').toLowerCase().split(' ')[0];
+  for (const o of oddsArr) {
+    const sel = (o.selection || o.outcome || '').toLowerCase();
+    const val = o.odd || o.value;
+    if (!val || val === '0') continue;
+    if (!home && (sel === '1' || sel === 'home' || (hn && sel.includes(hn)))) home = parseFloat(val).toFixed(2);
+    else if (!draw && (sel === 'x' || sel === 'draw')) draw = parseFloat(val).toFixed(2);
+    else if (!away && (sel === '2' || sel === 'away' || (an && sel.includes(an)))) away = parseFloat(val).toFixed(2);
+    if (home && draw && away) break;
+  }
+  return { home, draw, away };
+}
+
+// ─── For You match card — mirrors MatchCard from Shared.jsx ───────────────────
 function ForYouMatchCard({ match, onHide }) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const addToSlip = useStore((s) => s.addToSlip);
+  const slip      = useStore((s) => s.slip);
   const [hovered, setHovered] = useState(false);
   const [visible, setVisible] = useState(true);
+  const timezone = useTimezone();
 
   const isLive     = match.status === 'LIVE';
   const isFinished = match.status === 'FINISHED';
-  const hasScore   = match.score?.home != null && match.score?.away != null;
+
+  const homeTeam  = match?.home?.name ?? '';
+  const awayTeam  = match?.away?.name ?? '';
+  const scoreHome = match?.score?.home ?? null;
+  const scoreAway = match?.score?.away ?? null;
+  const hasScore  = scoreHome != null && scoreAway != null;
+  const minute    = match?.minute ?? null;
+
+  const { home: oHome, draw: oDraw, away: oAway } = extractOdds(match?.odds, homeTeam, awayTeam);
+  const isSelected = (sel) => slip?.some((s) => s.match_id === match?.id && s.selection === sel);
+
+  const handleOdds = (e, selection, odd) => {
+    e.stopPropagation();
+    if (!odd) return;
+    addToSlip({
+      id: `sel-${match.id}-1X2-${selection}`,
+      match_id: match.id,
+      match_label: `${homeTeam} vs ${awayTeam}`,
+      market: '1X2', selection,
+      odds: parseFloat(odd),
+    });
+  };
+
+  const kickoffTime = formatKickoff(match?.kickoff, timezone);
 
   // Auto-hide finished matches after 5 minutes
   useEffect(() => {
@@ -170,17 +263,20 @@ function ForYouMatchCard({ match, onHide }) {
       onClick={() => navigate(`/app/match/${match.id}`)}
       style={{
         position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
         cursor: 'pointer',
-        borderRadius: 10,
         overflow: 'hidden',
-        background: hovered ? 'rgba(99,210,255,0.03)' : 'var(--surface-0)',
+        borderRadius: 10,
         border: isLive
-          ? '1.5px solid rgba(255,71,87,0.5)'
+          ? '1.5px solid rgba(255,71,87,0.4)'
           : '1.5px solid rgba(255,255,255,0.07)',
-        padding: '10px 14px',
-        minWidth: 220,
-        flex: '0 0 auto',
+        background: hovered ? 'rgba(99,210,255,0.03)' : 'var(--surface-0)',
         transition: 'background 0.18s ease',
+        padding: '10px 14px',
+        minWidth: 260,
+        flex: '0 0 auto',
+        gap: 0,
       }}
     >
       {/* Live accent bar */}
@@ -195,72 +291,103 @@ function ForYouMatchCard({ match, onHide }) {
         />
       )}
 
-      {/* League */}
+      {/* Time / status column */}
       <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-        color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
-        marginBottom: 8,
-      }}>
-        {match.league || 'SpeedBet Special'}
-      </div>
-
-      {/* Teams + score */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {[
-          { team: match.home, score: match.score?.home, winning: hasScore && match.score?.home > match.score?.away },
-          { team: match.away, score: match.score?.away, winning: hasScore && match.score?.away > match.score?.home },
-        ].map(({ team, score, winning }, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{
-              fontSize: 13, fontWeight: winning ? 700 : 500,
-              color: winning ? '#fff' : 'rgba(255,255,255,0.75)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {team?.name || '—'}
-            </span>
-            {hasScore && (
-              <span style={{
-                fontSize: 15, fontWeight: 900,
-                color: isLive ? '#ff4757' : (winning ? '#fff' : 'rgba(255,255,255,0.6)'),
-                fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-              }}>{score}</span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom strip — status label */}
-      <div style={{
-        marginTop: 8, paddingTop: 6,
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        width: 52, flexShrink: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 3,
+        paddingRight: 10,
       }}>
         {isLive ? (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 9, fontWeight: 800, color: '#ff4757',
-            textTransform: 'uppercase', letterSpacing: '0.08em',
-          }}>
-            <motion.span
-              animate={{ opacity: [1, 0.3, 1] }}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <motion.div
+              animate={{ opacity: [1, 0.3, 1], scale: [1, 1.2, 1] }}
               transition={{ duration: 1.2, repeat: Infinity }}
-              style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff4757', display: 'inline-block' }}
+              style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: '#ff4757',
+                boxShadow: '0 0 10px #ff4757aa',
+              }}
             />
-            Live{match.minute ? ` · ${match.minute}'` : ''}
-          </span>
+            <span style={{
+              fontSize: 11, fontWeight: 800, color: '#ff4757',
+              letterSpacing: '0.03em', lineHeight: 1,
+            }}>{minute ? `${minute}'` : 'LIVE'}</span>
+          </div>
         ) : isFinished ? (
-          <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Full Time
-          </span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.06em' }}>FT</span>
+        ) : kickoffTime ? (
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>{kickoffTime}</span>
         ) : (
-          <span style={{ fontSize: 9, fontWeight: 700, color: '#63d2ff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Curated
-          </span>
-        )}
-        {!hasScore && !isFinished && (
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontWeight: 600 }}>Tap to bet →</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#63d2ff', letterSpacing: '0.06em' }}>SOON</span>
         )}
       </div>
+
+      {/* Thin divider */}
+      <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.05)', marginRight: 14, flexShrink: 0 }} />
+
+      {/* Teams — stacked home / away */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {/* League label above teams */}
+        <div style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+          color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase',
+          marginBottom: 2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {match.league || 'SpeedBet Special'}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <span style={{
+            fontSize: 13, fontWeight: 600,
+            color: hasScore && scoreHome > scoreAway ? '#ffffff' : 'rgba(255,255,255,0.82)',
+            letterSpacing: '-0.01em', lineHeight: 1.25,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+          }}>{homeTeam || 'Home Team'}</span>
+          {hasScore && (
+            <span style={{
+              fontSize: 15, fontWeight: 900,
+              color: isLive ? '#ff4757' : 'rgba(255,255,255,0.9)',
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '0.04em', flexShrink: 0,
+            }}>{scoreHome}</span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <span style={{
+            fontSize: 13, fontWeight: 600,
+            color: hasScore && scoreAway > scoreHome ? '#ffffff' : 'rgba(255,255,255,0.82)',
+            letterSpacing: '-0.01em', lineHeight: 1.25,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+          }}>{awayTeam || 'Away Team'}</span>
+          {hasScore && (
+            <span style={{
+              fontSize: 15, fontWeight: 900,
+              color: isLive ? '#ff4757' : 'rgba(255,255,255,0.9)',
+              fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '0.04em', flexShrink: 0,
+            }}>{scoreAway}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Odds buttons or FT label */}
+      {!isFinished ? (
+        <div style={{ display: 'flex', gap: 3, marginLeft: 10, flexShrink: 0, alignItems: 'center' }}>
+          <OddsBtn label="1" value={oHome} selected={isSelected('HOME')} onClick={(e) => handleOdds(e, 'HOME', oHome)} />
+          <OddsBtn label="X" value={oDraw} selected={isSelected('DRAW')} onClick={(e) => handleOdds(e, 'DRAW', oDraw)} />
+          <OddsBtn label="2" value={oAway} selected={isSelected('AWAY')} onClick={(e) => handleOdds(e, 'AWAY', oAway)} />
+        </div>
+      ) : (
+        <div style={{
+          marginLeft: 14, flexShrink: 0,
+          fontSize: 10, fontWeight: 700,
+          color: 'rgba(255,255,255,0.18)',
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}>Full time</div>
+      )}
     </motion.div>
   );
 }
@@ -300,7 +427,7 @@ function ForYouSection({ matches, loading, onHideMatch }) {
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse" style={{
-                  width: 220, height: 110, borderRadius: 10,
+                  width: 260, height: 110, borderRadius: 10,
                   background: 'var(--surface-0)',
                   border: '1.5px solid rgba(255,255,255,0.05)', flexShrink: 0,
                 }} />
