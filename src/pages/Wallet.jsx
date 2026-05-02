@@ -5,6 +5,9 @@ import { WalletIcon, PlusIcon, MinusIcon, TrendUpIcon, TrendDownIcon, ReceiptIco
 import { useStore } from '../store';
 import { fmtMoney, fmtTimeAgo, fmtMoneyWithCode } from '../utils';
 
+// ─────────────────────────────────────────────────────────────
+// Transaction display metadata
+// ─────────────────────────────────────────────────────────────
 const TX_META = {
   DEPOSIT:        { label: 'Deposit',        color: '#00E676' },
   WITHDRAW:       { label: 'Withdraw',       color: '#FF1744' },
@@ -14,37 +17,50 @@ const TX_META = {
   VIP_MEMBERSHIP: { label: 'VIP Membership', color: '#E8003D' },
 };
 
-// ── Currency derived from user.country (UserDto.country) ──────────────────
-// Ghana  → GHS  |  Nigeria → NGN  |  Everything else → USD
-// This mapping is the single source of truth. The wallet's own
-// wallet.currency is used as a fallback if the user object is absent.
+// ─────────────────────────────────────────────────────────────
+// Country → Currency mapping
+// Ghana (GH) → GHS | Nigeria (NG) → NGN | Everyone else → USD
+// Accepts ISO-2 codes and full country names (case-insensitive)
+// ─────────────────────────────────────────────────────────────
 const COUNTRY_TO_CURRENCY = {
   GH: 'GHS', GHANA: 'GHS',
   NG: 'NGN', NIGERIA: 'NGN',
 };
 
-/**
- * Resolve the active currency for a user.
- * Priority: user.country → wallet.currency → store.currency → 'GHS'
- */
-function resolveCurrency(user, wallet, storeCurrency) {
-  if (user?.country) {
-    const key = user.country.trim().toUpperCase();
-    const mapped = COUNTRY_TO_CURRENCY[key];
-    if (mapped) return mapped;
-    // Any country that is not GH / NG gets USD
-    return 'USD';
-  }
-  return wallet?.currency ?? storeCurrency ?? 'GHS';
+function countryToCurrency(countryCode) {
+  if (!countryCode) return null;
+  const key = countryCode.trim().toUpperCase();
+  return COUNTRY_TO_CURRENCY[key] ?? 'USD';
 }
 
-const MIN_DEPOSIT       = { GHS: 350,      NGN: 50000,  USD: 200  };
-const MIN_DEPOSIT_LABEL = { GHS: '₵350',   NGN: '₦50,000', USD: '$200' };
-const CURRENCY_SYMBOL   = { GHS: '₵',      NGN: '₦',    USD: '$'  };
+// ─────────────────────────────────────────────────────────────
+// IP-based country detection
+// Uses ipapi.co (free, no API key required).
+// Returns ISO-2 country code, e.g. "GH", "NG", "US"
+// Returns null on any network or parse failure.
+// ─────────────────────────────────────────────────────────────
+async function detectCountryFromIP() {
+  try {
+    const res = await fetch('https://ipapi.co/json/', {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.country_code ?? null;
+  } catch {
+    return null;
+  }
+}
 
-// ── Withdrawal minimums (updated) ─────────────────────────────────────────
-const MIN_WITHDRAW       = { GHS: 10000,      NGN: 500000,     USD: 2000     };
-const MIN_WITHDRAW_LABEL = { GHS: '₵10,000',  NGN: '₦500,000', USD: '$2,000' };
+// ─────────────────────────────────────────────────────────────
+// Deposit / Withdrawal limits per currency
+// ─────────────────────────────────────────────────────────────
+const MIN_DEPOSIT       = { GHS: 350,      NGN: 50000,    USD: 200    };
+const MIN_DEPOSIT_LABEL = { GHS: '₵350',   NGN: '₦50,000', USD: '$200' };
+const CURRENCY_SYMBOL   = { GHS: '₵',      NGN: '₦',      USD: '$'    };
+
+const MIN_WITHDRAW       = { GHS: 10000,     NGN: 500000,     USD: 2000     };
+const MIN_WITHDRAW_LABEL = { GHS: '₵10,000', NGN: '₦500,000', USD: '$2,000' };
 
 const QUICK_AMOUNTS = {
   GHS: [350,   500,    1000,   2000  ],
@@ -52,22 +68,24 @@ const QUICK_AMOUNTS = {
   USD: [200,   500,    1000,   2000  ],
 };
 
+// ─────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────
 export default function Wallet() {
-  const wallet         = useStore((s) => s.wallet);
-  const user           = useStore((s) => s.user);
-  const fetchWallet    = useStore((s) => s.fetchWallet);
-  const withdraw       = useStore((s) => s.withdraw);
-  const pushToast      = useStore((s) => s.pushToast);
-  const storeCurrency  = useStore((s) => s.currency);
+  const wallet        = useStore((s) => s.wallet);
+  const user          = useStore((s) => s.user);
+  const fetchWallet   = useStore((s) => s.fetchWallet);
+  const withdraw      = useStore((s) => s.withdraw);
+  const pushToast     = useStore((s) => s.pushToast);
+  const storeCurrency = useStore((s) => s.currency);
 
-  // ── Currency is resolved from UserDto.country (from /api/users/me) ──────
-  // UserDto shape: { id, email, firstName, lastName, phone, country, role, ... }
-  // user.country is a string such as "GH", "NG", "US", "GB", etc.
-  // Ghanaian users  → GHS
-  // Nigerian users  → NGN
-  // Everyone else   → USD
-  const currency = resolveCurrency(user, wallet, storeCurrency);
+  // ── IP detection state ────────────────────────────────────────────────
+  // ipCountry: ISO-2 code returned by ipapi.co, e.g. "GH"
+  // ipLoading: true while the fetch is in-flight (used to show "···" placeholders)
+  const [ipCountry, setIpCountry] = useState(null);
+  const [ipLoading, setIpLoading] = useState(true);
 
+  // ── Other UI state ────────────────────────────────────────────────────
   const [loading,        setLoading]        = useState(false);
   const [showDeposit,    setShowDeposit]    = useState(false);
   const [showWithdraw,   setShowWithdraw]   = useState(false);
@@ -77,14 +95,36 @@ export default function Wallet() {
   const [accountNumber,  setAccountNumber]  = useState('');
   const [accountName,    setAccountName]    = useState('');
 
-  // ── Fetch wallet on mount ──────────────────────────────────────────────
+  // ── Fire IP detection once on mount ──────────────────────────────────
+  useEffect(() => {
+    detectCountryFromIP().then((code) => {
+      setIpCountry(code);   // e.g. "GH", "NG", "US", or null
+      setIpLoading(false);
+    });
+  }, []);
+
+  // ── Resolve currency — priority chain ────────────────────────────────
+  // 1. IP geolocation  ← most reliable, fires ~1-2 s after mount
+  // 2. UserDto.country ← from /api/users/me (user.country field)
+  // 3. wallet.currency ← whatever the backend stored for this wallet
+  // 4. store.currency  ← app-level default
+  // 5. 'GHS'           ← hard-coded safety net
+  const currency = (() => {
+    if (ipCountry)        return countryToCurrency(ipCountry);       // 1. IP
+    if (user?.country)    return countryToCurrency(user.country);    // 2. UserDto
+    if (wallet?.currency) return wallet.currency;                    // 3. wallet
+    if (storeCurrency)    return storeCurrency;                      // 4. store
+    return 'GHS';                                                    // 5. fallback
+  })();
+
+  // ── Fetch wallet after login ──────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     fetchWallet().finally(() => setLoading(false));
   }, [user]);
 
-  // ── Poll after returning from Paystack ────────────────────────────────
+  // ── Poll after Paystack redirect ──────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const params = new URLSearchParams(window.location.search);
@@ -101,6 +141,7 @@ export default function Wallet() {
     }
   }, [user]);
 
+  // ── Normalise transactions ────────────────────────────────────────────
   const rawTransactions = wallet?.transactions ?? [];
   const transactions = rawTransactions.map((tx) => ({
     id:            tx.id,
@@ -110,27 +151,25 @@ export default function Wallet() {
     at:            tx.createdAt   ?? tx.at ?? '',
   }));
 
-  const balance = wallet?.balance ?? 0;
-
+  const balance          = wallet?.balance ?? 0;
   const totalDeposits    = transactions.filter((t) => t.kind === 'DEPOSIT' ).reduce((s, t) => s + t.amount, 0);
   const totalWithdrawals = Math.abs(transactions.filter((t) => t.kind === 'WITHDRAW').reduce((s, t) => s + t.amount, 0));
   const totalWinnings    = transactions.filter((t) => t.kind === 'BET_WIN'  ).reduce((s, t) => s + t.amount, 0);
 
-  const minDeposit      = MIN_DEPOSIT[currency]       ?? MIN_DEPOSIT.GHS;
-  const minDepositLabel = MIN_DEPOSIT_LABEL[currency] ?? MIN_DEPOSIT_LABEL.GHS;
+  // ── Per-currency limits ───────────────────────────────────────────────
+  const minDeposit       = MIN_DEPOSIT[currency]       ?? MIN_DEPOSIT.GHS;
+  const minDepositLabel  = MIN_DEPOSIT_LABEL[currency] ?? MIN_DEPOSIT_LABEL.GHS;
   const minWithdraw      = MIN_WITHDRAW[currency]       ?? MIN_WITHDRAW.GHS;
   const minWithdrawLabel = MIN_WITHDRAW_LABEL[currency] ?? MIN_WITHDRAW_LABEL.GHS;
-  const quickAmounts    = QUICK_AMOUNTS[currency]     ?? QUICK_AMOUNTS.GHS;
-  const symbol          = CURRENCY_SYMBOL[currency]   ?? '₵';
+  const quickAmounts     = QUICK_AMOUNTS[currency]     ?? QUICK_AMOUNTS.GHS;
 
-  // ── Deposit: initialise Paystack and redirect ──────────────────────────
+  // ── Deposit ───────────────────────────────────────────────────────────
   const submitDeposit = async () => {
     const a = +amount;
     if (!a || a < minDeposit) {
       pushToast({ variant: 'error', title: `Min deposit ${minDepositLabel}` });
       return;
     }
-
     try {
       const res = await useStore.getState().deposit({ amount: a, currency });
       if (res?.error) throw new Error(res.error);
@@ -193,6 +232,7 @@ export default function Wallet() {
     fetchWallet();
   };
 
+  // ── Signed-out gate ───────────────────────────────────────────────────
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
@@ -208,6 +248,12 @@ export default function Wallet() {
     );
   }
 
+  // ── Currency label — show pulse while IP is resolving ─────────────────
+  const currencyLabel = ipLoading
+    ? <span className="opacity-40 animate-pulse">···</span>
+    : currency;
+
+  // ─────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-10 space-y-6">
@@ -215,8 +261,8 @@ export default function Wallet() {
         {/* Balance + actions */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-[10px] caps text-white-60 mb-1">
-              AVAILABLE BALANCE · {currency}
+            <div className="text-[10px] caps text-white-60 mb-1 flex items-center gap-1">
+              AVAILABLE BALANCE · {currencyLabel}
             </div>
             {loading ? (
               <div className="h-14 w-48 bg-black-800 animate-pulse rounded" />
@@ -325,13 +371,11 @@ export default function Wallet() {
         <div className="flex flex-col gap-4 w-full">
           <div className="flex items-center justify-between bg-black-800 border border-black-700 rounded px-4 py-3">
             <span className="text-white-60 text-xs">Depositing in</span>
-            <span className="font-mono font-bold text-white-100">{currency}</span>
+            <span className="font-mono font-bold text-white-100">{currencyLabel}</span>
           </div>
-          <div>
-            <p className="text-white-60 text-xs">
-              Min deposit: <span className="text-white-100 font-semibold">{minDepositLabel}</span>
-            </p>
-          </div>
+          <p className="text-white-60 text-xs">
+            Min deposit: <span className="text-white-100 font-semibold">{minDepositLabel}</span>
+          </p>
           <Input
             label={`Amount (${currency})`}
             type="number"
@@ -367,7 +411,7 @@ export default function Wallet() {
           </div>
           <div className="flex items-center justify-between bg-black-800 border border-black-700 rounded px-4 py-3">
             <span className="text-white-60 text-xs">Withdrawing in</span>
-            <span className="font-mono font-bold text-white-100">{currency}</span>
+            <span className="font-mono font-bold text-white-100">{currencyLabel}</span>
           </div>
           <Input
             label={`Amount (${currency})`}
