@@ -8,7 +8,6 @@ import {
   scrollScaleIn,
   staggerFadeIn,
   cardHover,
-  mouseTilt,
   footerSlideUp,
   linkHoverUnderline,
   mouseSpotlight,
@@ -25,10 +24,7 @@ import { useTimezone } from '../hooks/useTimezone';
 import { formatKickoff } from '../utils/time';
 
 import {
-  resolveHardcodedLogo,
   isTop6LeagueMatch,
-  TEAM_LOGOS,
-  TOP6_LEAGUES,
 } from '../data/TOP_6_LEAGUES_DATA';
 
 const arcadeGames = [
@@ -81,15 +77,15 @@ export function isCupOrChampionship(leagueName = '') {
 }
 
 function adaptMatch(m) {
-  const homeName = resolveTeamName(m, 'home');
-  const awayName = resolveTeamName(m, 'away');
-  const league = m.league ?? m.competition?.name ?? m.league_name ?? '';
+  const homeName  = resolveTeamName(m, 'home');
+  const awayName  = resolveTeamName(m, 'away');
+  const league    = m.league ?? m.competition?.name ?? m.league_name ?? '';
   const scoreHome = m.scoreHome ?? m.score?.home ?? m.score_home ?? null;
   const scoreAway = m.scoreAway ?? m.score?.away ?? m.score_away ?? null;
-  const kickoff = m.kickoffAt ?? m.kickoff ?? m.kick_off ?? m.startTime ?? null;
-  const minute = m.minute ?? m.metadata?.current_minute ?? m.metadata?.['current_minute'] ?? null;
-  const rawHome = { name: homeName, short: (m.home?.short ?? homeName.slice(0, 3)).toUpperCase(), color: m.home?.color ?? '#888', logo: null };
-  const rawAway = { name: awayName, short: (m.away?.short ?? awayName.slice(0, 3)).toUpperCase(), color: m.away?.color ?? '#888', logo: null };
+  const kickoff   = m.kickoffAt ?? m.kickoff ?? m.kick_off ?? m.startTime ?? null;
+  const minute    = m.minute ?? m.metadata?.current_minute ?? m.metadata?.['current_minute'] ?? null;
+  const rawHome   = { name: homeName, short: (m.home?.short ?? homeName.slice(0, 3)).toUpperCase(), color: m.home?.color ?? '#888', logo: null };
+  const rawAway   = { name: awayName, short: (m.away?.short ?? awayName.slice(0, 3)).toUpperCase(), color: m.away?.color ?? '#888', logo: null };
   return {
     id: m.id ?? m.externalId ?? `match-${Math.random().toString(36).slice(2)}`,
     status: m.status ?? 'SCHEDULED',
@@ -102,6 +98,21 @@ function adaptMatch(m) {
 function adaptAdminMatch(m) {
   const homeName = m.homeTeam ?? m.home?.name ?? '';
   const awayName = m.awayTeam ?? m.away?.name ?? '';
+
+  const rawOdds =
+    m.odds ??
+    m.markets?.[0]?.outcomes ??
+    m.markets?.[0]?.odds ??
+    null;
+
+  // ── LOGGING: full raw admin match shape ──
+  console.group(`[ForYou] Admin match: ${homeName} vs ${awayName}`);
+  console.log('raw match object:', JSON.parse(JSON.stringify(m)));
+  console.log('odds field (m.odds):', m.odds);
+  console.log('markets field (m.markets):', m.markets);
+  console.log('resolved rawOdds:', rawOdds);
+  console.groupEnd();
+
   return {
     id: m.id,
     status: m.status ?? 'SCHEDULED',
@@ -111,7 +122,7 @@ function adaptAdminMatch(m) {
     score: { home: m.scoreHome ?? null, away: m.scoreAway ?? null },
     minute: m.minutePlayed ?? m.metadata?.current_minute ?? null,
     kickoff: m.kickoffAt ?? null,
-    odds: m.odds ?? null,
+    odds: rawOdds,
   };
 }
 
@@ -144,7 +155,7 @@ function MatchRowSkeleton() {
   );
 }
 
-// ─── Odds button (mirrors Shared.jsx OddsBtn) ─────────────────────────────────
+// ─── Odds button ──────────────────────────────────────────────────────────────
 function OddsBtn({ label, value, selected, onClick }) {
   const has = value && value !== '—';
   return (
@@ -190,21 +201,40 @@ function OddsBtn({ label, value, selected, onClick }) {
   );
 }
 
-// ─── Extract odds (mirrors Shared.jsx extractOdds) ────────────────────────────
-function extractOdds(oddsArr, homeTeam, awayTeam) {
-  if (!Array.isArray(oddsArr) || !oddsArr.length) return { home: null, draw: null, away: null };
+// ─── Extract odds — handles array OR flat object ──────────────────────────────
+function extractOdds(odds, homeTeam, awayTeam) {
+  if (!odds) return { home: null, draw: null, away: null };
+
+  // ── LOGGING ──
+  console.log('[extractOdds] raw odds received:', odds, '| type:', Array.isArray(odds) ? 'array' : typeof odds);
+
+  // Flat object: { home, draw, away } or { homeOdds, drawOdds, awayOdds } or { '1', 'x', '2' }
+  if (!Array.isArray(odds)) {
+    const h = odds.home ?? odds.homeOdds ?? odds['1'] ?? odds.home_win ?? null;
+    const d = odds.draw ?? odds.drawOdds ?? odds['x'] ?? odds['X'] ?? odds.draw_win ?? null;
+    const a = odds.away ?? odds.awayOdds ?? odds['2'] ?? odds.away_win ?? null;
+    console.log('[extractOdds] flat object → h:', h, 'd:', d, 'a:', a);
+    return {
+      home: h ? parseFloat(h).toFixed(2) : null,
+      draw: d ? parseFloat(d).toFixed(2) : null,
+      away: a ? parseFloat(a).toFixed(2) : null,
+    };
+  }
+
+  // Array: [{ selection: '1', odd: '1.85' }, ...]
   let home = null, draw = null, away = null;
   const hn = (homeTeam || '').toLowerCase().split(' ')[0];
   const an = (awayTeam || '').toLowerCase().split(' ')[0];
-  for (const o of oddsArr) {
-    const sel = (o.selection || o.outcome || '').toLowerCase();
-    const val = o.odd || o.value;
+  for (const o of odds) {
+    const sel = (o.selection || o.outcome || o.name || '').toLowerCase();
+    const val = o.odd ?? o.value ?? o.odds ?? o.price;
     if (!val || val === '0') continue;
     if (!home && (sel === '1' || sel === 'home' || (hn && sel.includes(hn)))) home = parseFloat(val).toFixed(2);
     else if (!draw && (sel === 'x' || sel === 'draw')) draw = parseFloat(val).toFixed(2);
     else if (!away && (sel === '2' || sel === 'away' || (an && sel.includes(an)))) away = parseFloat(val).toFixed(2);
     if (home && draw && away) break;
   }
+  console.log('[extractOdds] array → h:', home, 'd:', draw, 'a:', away);
   return { home, draw, away };
 }
 
@@ -244,7 +274,6 @@ function ForYouMatchCard({ match, onHide }) {
 
   const kickoffTime = formatKickoff(match?.kickoff, timezone);
 
-  // Auto-hide finished matches after 5 minutes
   useEffect(() => {
     if (!isFinished) return;
     const timer = setTimeout(() => {
@@ -326,9 +355,8 @@ function ForYouMatchCard({ match, onHide }) {
       {/* Thin divider */}
       <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.05)', marginRight: 14, flexShrink: 0 }} />
 
-      {/* Teams — stacked home / away */}
+      {/* Teams */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {/* League label above teams */}
         <div style={{
           fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
           color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase',
@@ -493,14 +521,29 @@ export default function Home() {
     async function loadForYou() {
       try {
         const data = await adminMatchesApi.all();
+
+        // ── LOGGING: raw API response ──
+        console.group('[ForYou] Raw adminMatchesApi.all() response');
+        console.log('total items:', data?.length);
+        if (data?.[0]) {
+          console.log('first item (full):', JSON.parse(JSON.stringify(data[0])));
+          console.log('first item keys:', Object.keys(data[0]));
+          console.log('first item odds:', data[0].odds);
+          console.log('first item markets:', data[0].markets);
+        }
+        console.groupEnd();
+
         if (!cancelled) {
           const adapted  = (data ?? []).map(adaptAdminMatch);
           const active   = adapted.filter((m) => m.status !== 'FINISHED');
           const finished = adapted.filter((m) => m.status === 'FINISHED');
+
+          console.log('[ForYou] adapted matches (first):', adapted[0]);
+
           setForYouMatches([...active, ...finished].slice(0, 12));
         }
       } catch (err) {
-        console.error('Home: failed to load admin matches for For You section', err);
+        console.error('[ForYou] failed to load admin matches:', err);
       } finally {
         if (!cancelled) setForYouLoading(false);
       }
@@ -545,14 +588,12 @@ export default function Home() {
 
         if (cancelled) return;
 
-        const adaptedLive = adaptWithOdds(withOddsData?.live).filter((m) => !isDemoMatch(m));
-
-        const allUpcoming    = adaptWithOdds(withOddsData?.upcoming).filter((m) => !isDemoMatch(m));
-        const upTop6         = allUpcoming.filter((m) =>  matchIsTop6(m));
-        const upWithLogos    = allUpcoming.filter((m) => !matchIsTop6(m));
+        const adaptedLive     = adaptWithOdds(withOddsData?.live).filter((m) => !isDemoMatch(m));
+        const allUpcoming     = adaptWithOdds(withOddsData?.upcoming).filter((m) => !isDemoMatch(m));
+        const upTop6          = allUpcoming.filter((m) =>  matchIsTop6(m));
+        const upWithLogos     = allUpcoming.filter((m) => !matchIsTop6(m));
         const adaptedUpcoming = [...upTop6, ...upWithLogos].slice(0, 12);
-
-        const adaptedEnded = (results ?? []).map((m) => adaptMatch(m)).filter((m) => !isDemoMatch(m)).slice(0, 6);
+        const adaptedEnded    = (results ?? []).map((m) => adaptMatch(m)).filter((m) => !isDemoMatch(m)).slice(0, 6);
 
         setLiveMatches(adaptedLive);
         setUpcomingMatches(adaptedUpcoming);
@@ -602,7 +643,6 @@ export default function Home() {
     (m) => isCupOrChampionship(m.league) || matchIsTop6(m)
   );
   const carouselMatches = apiCarouselMatches.length > 0 ? apiCarouselMatches : getFallbackCarouselMatches();
-
   const visibleForYouMatches = forYouMatches.filter((m) => !hiddenForYouIds.has(m.id));
 
   const OddsHeader = () => (
